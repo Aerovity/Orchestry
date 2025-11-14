@@ -1,0 +1,61 @@
+# Orchestry Configuration File
+
+# API Settings
+api:
+  provider: "anthropic"
+  model: "claude-3-5-sonnet-20241022"
+  max_tokens: 1024
+  temperature: 0.7
+  rate_limit_delay: 1.0  # seconds between API calls
+
+# Agent Configuration
+agents:
+  - role: "Creative Writer"
+    goal: "Generate creative and engaging story content"
+    color: "green"
+  - role: "Editor"
+    goal: "Refine content, improve clarity and coherence"
+    color: "yellow"
+  - role: "Narrator"
+    goal: "Maintain story flow and tie elements together"
+    color: "blue"
+
+# Environment Settings
+environment:
+  max_turns: 15
+  story_target_length: 5  # minimum turns before story can end
+  task_type: "collaborative_story"
+
+# Reward Weights
+rewards:
+  story_quality_weight: 0.4
+  collaboration_weight: 0.4
+  efficiency_weight: 0.2
+  efficiency_threshold_good: 10
+  efficiency_threshold_bad: 20
+
+# Training Settings
+training:
+  num_episodes: 20
+  test_episodes: 3
+  learning_rate: 0.1  # how much to update prompts based on rewards
+  exploration_rate: 0.2  # probability of trying random variations
+  save_frequency: 5  # save checkpoint every N episodes
+
+# Story Writing Task
+story_task:
+  prompt: "Write a creative short story together. The story should be engaging, coherent, and complete."
+  themes:
+    - "A mysterious discovery"
+    - "An unexpected friendship"
+    - "A journey to an unknown place"
+    - "A problem that requires teamwork"
+    - "A celebration with a twist"
+
+# Output Settings
+output:
+  verbose: true
+  show_agent_thinking: false
+  save_episodes: true
+  generate_plots: true
+  log_level: "INFO"
