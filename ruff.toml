@@ -1,0 +1,60 @@
+# Ruff configuration for Orchestry
+
+# Line length
+line-length = 100
+
+[lint]
+select = ["ALL"]
+ignore = [
+    # Stylistic/opinionated rules to ignore
+    "TRY300",   # Consider moving statement to else block - too opinionated
+    "TRY301",   # Abstract raise to inner function - too opinionated
+    "TRY401",   # Redundant exception in logging.exception - intentional for clarity
+    "TRY003",   # Long messages outside exception class - acceptable
+    "SLF001",   # Private member access - intentional in some cases
+    "PLR0912",  # Too many branches - would require significant refactoring
+    "PLR0915",  # Too many statements - would require significant refactoring
+    "PLR0913",  # Too many arguments - acceptable for configuration functions
+    "PLC0415",  # Import not at top-level - intentional in test files
+    "PERF401",  # List comprehension vs append - minor performance difference
+    "PLR2004",  # Magic values - constants would be overkill for many cases
+    "C901",     # Too complex - would require significant refactoring
+    "BLE001",   # Catch blind exception - acceptable in CLI entry points
+    "EXE001",   # Shebang present but not executable - not critical
+    "EXE002",   # Executable but no shebang - not critical
+    "T201",     # Print found - acceptable in scripts and CLIs
+    "S101",     # Assert detected - acceptable in tests
+    "S311",     # Pseudo-random generators - not cryptographic use
+    "S324",     # MD5 hash - not for security, just for caching
+    "S603",     # Subprocess - controlled input
+    "FBT001",   # Boolean positional arg - acceptable
+    "FBT002",   # Boolean default arg - acceptable
+    "FBT003",   # Boolean value in call - acceptable
+    "D104",     # Missing package docstring - not critical
+    "D107",     # Missing __init__ docstring - not critical
+    "TD002",    # TODO without author - not critical
+    "TD003",    # TODO without issue link - not critical
+    "FIX002",   # TODO comment - intentional
+    "EM101",    # String literal in exception - acceptable
+    "NPY002",   # Legacy numpy random - acceptable for now
+    "PLC0206",  # Dict iteration without .items() - acceptable
+    "G004",     # Logging f-string - would require many changes, not critical
+    "PTH123",   # Path.open() - would require many changes, not critical
+    "DTZ005",   # datetime without tz - not critical for this use case
+    "RUF012",   # ClassVar for mutable - intentional design
+    "E501",     # Line too long - mostly in strings/prompts where wrapping reduces readability
+    # Docstring formatting - too pedantic
+    "D400",     # First line should end with period
+    "D415",     # First line should end with punctuation
+    "D401",     # First line should be imperative
+    "D203",     # Blank line before class
+    "D212",     # Multi-line docstring summary
+    "D213",     # Multi-line docstring summary second line
+]
+
+[lint.per-file-ignores]
+# Test files can have unused imports (used for testing imports work)
+"test_marl.py" = ["F401"]
+"tests/**/*.py" = ["F401", "S101"]
+"verify_setup.py" = ["S603"]
+"examples/**/*.py" = ["T201"]
