@@ -4,7 +4,7 @@
 
 Orchestry trains multiple LLM agents to collaborate using **real Multi-Agent Reinforcement Learning (MARL)**. Watch AI agents learn to work together on production tasks like code review, documentation, and more.
 
-![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![MARL](https://img.shields.io/badge/MARL-Production-brightgreen.svg)
 
@@ -73,22 +73,39 @@ Think of it as: **"MARL-guided Monte Carlo Tree Search over conversation space"*
 ## 📦 Installation
 
 ### Prerequisites
-- Python 3.10 or higher
+- Python 3.11 or higher
+- [uv](https://github.com/astral-sh/uv) package manager (recommended) or pip
 - Anthropic API key ([Get one here](https://console.anthropic.com/))
 
-### Setup
+### Quick Setup (Recommended - using uv)
 
 ```bash
 # Clone repository
 git clone https://github.com/Aerovity/Orchestry.git
 cd Orchestry
 
-# Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Create virtual environment and install (uv handles everything)
+uv venv --python 3.11
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
 
-# Install dependencies
-pip install -r requirements.txt
+# Set up API key
+cp .env.example .env
+# Edit .env and add: ANTHROPIC_API_KEY=your-key-here
+
+# Install pre-commit hooks (optional but recommended)
+pre-commit install
+```
+
+### Alternative Setup (using pip)
+
+```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install package
+pip install -e ".[dev]"
 
 # Set up API key
 cp .env.example .env
@@ -102,14 +119,16 @@ cp .env.example .env
 ### Run Your First MARL Training
 
 ```bash
-# Quick test (2 episodes, k=1, beam=1)
-python main_marl.py --dry-run --verbose
+# Using the CLI commands (recommended)
+orchestry-marl --dry-run --verbose  # Quick test (2 episodes)
+orchestry-marl --episodes 10 --verbose  # Small run
+orchestry-marl --task code_review --episodes 20  # Full training
 
-# Small training run (10 episodes)
-python main_marl.py --episodes 10 --verbose
+# Or run directly from examples/
+python examples/run_marl.py --dry-run --verbose
 
-# Full training (20 episodes with defaults)
-python main_marl.py --task code_review --episodes 20
+# Using Make (if you have Makefile)
+make run-marl  # Runs in dry-run mode
 ```
 
 ### Example Output
@@ -404,9 +423,78 @@ python main_marl.py --dry-run  # k=1, beam=1, episodes=2
 
 ---
 
+## 📁 Project Structure
+
+```
+orchestry/
+├── pyproject.toml          # Modern Python project config & dependencies
+├── uv.lock                 # Locked dependencies for reproducibility
+├── Makefile                # Development commands (format, test, lint)
+├── .pre-commit-config.yaml # Git hooks for code quality
+│
+├── orchestry/              # Main package (installable)
+│   ├── __init__.py
+│   ├── py.typed           # PEP 561 type marker
+│   │
+│   ├── marl/              # MARL implementation
+│   │   ├── api_grpo.py    # Group Relative Policy Optimization
+│   │   ├── trainer.py     # Main training loop with beam search
+│   │   ├── trajectory.py  # Trajectory and turn management
+│   │   ├── value_estimator.py  # Centralized value estimation
+│   │   └── behavior_library.py  # Meta-learning from success
+│   │
+│   ├── tasks/             # Task definitions
+│   │   ├── base.py        # Abstract task interface
+│   │   └── code_review.py # Code review task (3-agent collaboration)
+│   │
+│   ├── legacy/            # Legacy story writing system
+│   │   ├── agent.py
+│   │   ├── environment.py
+│   │   ├── rewards.py
+│   │   ├── trainer.py
+│   │   └── utils.py
+│   │
+│   └── cli/               # Command-line interfaces
+│       ├── marl.py        # MARL CLI (orchestry-marl command)
+│       └── legacy.py      # Legacy CLI (orchestry-legacy command)
+│
+├── tests/                 # Test suite (mirrors package structure)
+│   ├── marl/
+│   ├── tasks/
+│   └── legacy/
+│
+├── examples/              # Standalone example scripts
+│   ├── run_marl.py        # MARL training example
+│   └── run_legacy.py      # Legacy training example
+│
+├── configs/               # Configuration files
+│   ├── marl.yaml          # MARL system configuration
+│   └── legacy.yaml        # Legacy system configuration
+│
+└── docs/                  # Documentation
+    ├── QUICKSTART.md
+    ├── PROJECT_SUMMARY.md
+    ├── IMPLEMENTATION_SUMMARY.md
+    └── MIGRATION_GUIDE.md
+```
+
+### Development Tools
+
+- **Black**: Code formatting (line length: 100)
+- **Ruff**: Fast linting and import sorting
+- **Mypy**: Strict type checking
+- **Pytest**: Testing framework with coverage
+- **Pre-commit**: Automated code quality checks
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+
+---
+
 ## 🤝 Contributing
 
-Contributions welcome! Areas for improvement:
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+Areas for improvement:
 - New tasks (business planning, creative writing, debates)
 - Better reward functions (automated testing)
 - Performance optimization (parallel beam search)

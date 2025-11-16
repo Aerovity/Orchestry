@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
-"""
-Quick test script for Orchestry MARL system.
+"""Quick test script for Orchestry MARL system.
 
 Runs a minimal test to verify all components work together.
 """
 
 import os
 import sys
+
 from dotenv import load_dotenv
 
 # Load environment
 load_dotenv()
 
-def test_imports():
+
+def test_imports() -> bool:
     """Test that all modules can be imported."""
     print("Testing imports...")
 
     try:
-        from src.marl import (
-            MultiTurnTrajectory,
-            CentralizedValueEstimator,
+        from orchestry.marl import (
             APIGroupRelativePolicyOptimizer,
-            MARLTrainer
+            CentralizedValueEstimator,
+            MARLTrainer,
+            MultiTurnTrajectory,
         )
-        from src.tasks import BaseTask, CodeReviewTask
+        from orchestry.tasks import BaseTask, CodeReviewTask
+
         print("✓ All imports successful")
         return True
     except ImportError as e:
@@ -31,12 +33,12 @@ def test_imports():
         return False
 
 
-def test_api_key():
+def test_api_key() -> bool:
     """Test that API key is set."""
     print("\nTesting API key...")
 
-    api_key = os.getenv('ANTHROPIC_API_KEY')
-    if not api_key or api_key == 'your-api-key-here':
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key or api_key == "your-api-key-here":
         print("✗ ANTHROPIC_API_KEY not set properly")
         print("  Please set it in .env file")
         return False
@@ -45,23 +47,20 @@ def test_api_key():
     return True
 
 
-def test_trajectory():
+def test_trajectory() -> bool:
     """Test trajectory creation and manipulation."""
     print("\nTesting trajectory system...")
 
-    from src.marl import MultiTurnTrajectory
+    from orchestry.marl import MultiTurnTrajectory
 
     try:
-        traj = MultiTurnTrajectory(
-            max_turns=10,
-            task_description="Test task"
-        )
+        traj = MultiTurnTrajectory(max_turns=10, task_description="Test task")
 
         traj.add_turn(
             agent_id=0,
             agent_role="Agent 0",
             observation="Test observation",
-            action="Test action"
+            action="Test action",
         )
 
         context = traj.get_context_for_agent(1)
@@ -76,24 +75,20 @@ def test_trajectory():
         return False
 
 
-def test_task():
+def test_task() -> bool:
     """Test task creation."""
     print("\nTesting task system...")
 
-    from src.tasks import CodeReviewTask, TaskConfig
+    from orchestry.tasks import CodeReviewTask, TaskConfig
 
     try:
-        config = TaskConfig(
-            max_turns=15,
-            min_turns=3,
-            task_type='code_review'
-        )
+        config = TaskConfig(max_turns=15, min_turns=3, task_type="code_review")
 
         task = CodeReviewTask(config)
         initial_obs = task.reset()
 
-        assert 'task_description' in initial_obs
-        assert 'Code Review Task' in initial_obs['task_description']
+        assert "task_description" in initial_obs
+        assert "Code Review Task" in initial_obs["task_description"]
 
         print("✓ Task system working")
         return True
@@ -102,11 +97,11 @@ def test_task():
         return False
 
 
-def test_agent():
+def test_agent() -> bool:
     """Test agent creation."""
     print("\nTesting agent system...")
 
-    from src.marl.api_grpo import Agent
+    from orchestry.marl.api_grpo import Agent
 
     try:
         agent = Agent(
@@ -114,7 +109,7 @@ def test_agent():
             role="Test Agent",
             goal="Test goal",
             system_prompt="Test prompt",
-            learned_behaviors=[]
+            learned_behaviors=[],
         )
 
         assert agent.role == "Test Agent"
@@ -127,11 +122,11 @@ def test_agent():
         return False
 
 
-def main():
+def main() -> int:
     """Run all tests."""
-    print("="*60)
+    print("=" * 60)
     print("Orchestry MARL - Quick Test")
-    print("="*60)
+    print("=" * 60)
 
     tests = [
         test_imports,
@@ -145,19 +140,18 @@ def main():
     for test in tests:
         results.append(test())
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print(f"Results: {sum(results)}/{len(results)} tests passed")
-    print("="*60)
+    print("=" * 60)
 
     if all(results):
         print("\n✓ All tests passed! System is ready.")
         print("\nRun a dry-run to test the full training loop:")
         print("  python main_marl.py --dry-run --verbose")
         return 0
-    else:
-        print("\n✗ Some tests failed. Please fix issues above.")
-        return 1
+    print("\n✗ Some tests failed. Please fix issues above.")
+    return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
