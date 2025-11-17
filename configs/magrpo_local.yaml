@@ -1,0 +1,69 @@
+# MAGRPO Local Training Configuration
+# For use with Colab Pro A100 GPU and local model fine-tuning
+
+training:
+  episodes: 500
+  group_size: 4  # G in paper (samples per agent per turn)
+  batch_size: 8  # Update policy every N episodes
+  learning_rate: 0.0001  # 1e-4
+  max_grad_norm: 1.0
+  warmup_steps: 100
+
+  checkpoint_dir: "checkpoints"
+  checkpoint_frequency: 50  # Save every 50 episodes
+  eval_frequency: 10  # Log metrics every 10 episodes
+
+  max_budget: 15.0  # Maximum USD to spend on API calls
+
+model:
+  name: "Qwen/Qwen2.5-Coder-1.5B"
+  load_in_4bit: true  # Use 4-bit quantization (reduces memory)
+  device: "auto"  # Automatic device placement
+
+  # LoRA configuration
+  lora:
+    r: 16  # LoRA rank
+    lora_alpha: 32
+    target_modules:
+      - "q_proj"
+      - "k_proj"
+      - "v_proj"
+      - "o_proj"
+    lora_dropout: 0.05
+    bias: "none"
+
+generation:
+  max_new_tokens: 512
+  temperature: 0.8
+  top_p: 0.95
+  do_sample: true
+
+task:
+  name: "code_collaboration"
+  problems_file: "datasets/coop_problems.json"
+  use_claude_eval: true  # Use Claude for cooperation evaluation
+  train_test_split: 0.75  # 75% train, 25% test
+
+rewards:
+  # Reward weights (must sum to 1.0)
+  structure_weight: 0.25
+  syntax_weight: 0.25
+  tests_weight: 0.25
+  cooperation_weight: 0.25
+
+claude_api:
+  model: "claude-3-5-haiku-20241022"
+  max_tokens: 100
+  temperature: 0.0  # Deterministic for evaluation
+
+logging:
+  level: "INFO"
+  log_file: "logs/training.log"
+  console_output: true
+
+# Quick test configuration (for smoke tests)
+quick_test:
+  episodes: 10
+  group_size: 2
+  batch_size: 4
+  checkpoint_frequency: 5
