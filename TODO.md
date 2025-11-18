@@ -1,12 +1,34 @@
 # MAGRPO Execution TODO
-## All Code Implemented - Ready to Run!
+## Code Status - Almost Ready to Run!
 
-✅ **Status**: All code modules are implemented and ready
-**Your Task**: Execute the training and analyze results
+⚠️ **Status**: Most code modules are implemented, but notebook is missing
+**Your Task**: Create notebook, then execute training and analyze results
 
 **Budget**: $10-15 for Claude Haiku evaluations
 **Time**: 1-2 hours setup + 6-8 hours training (overnight)
 **Hardware**: Colab Pro with A100 GPU
+
+---
+
+## Implementation Status
+
+### ✅ COMPLETED
+- `orchestry/marl/algorithms/magrpo.py` - MAGRPO algorithm
+- `orchestry/marl/local_inference.py` - Local LLM wrapper
+- `orchestry/marl/rewards/code_reward.py` - Reward model
+- `orchestry/marl/rewards/budget_tracker.py` - Budget tracking
+- `orchestry/tasks/code_collaboration.py` - Task environment
+- `orchestry/marl/training/magrpo_trainer.py` - Training loop
+- `orchestry/baselines/fixed_model.py` - Fixed model baseline
+- `orchestry/baselines/naive_concat.py` - Naive concatenation baseline
+- `orchestry/baselines/sequential.py` - Sequential pipeline baseline
+- `orchestry/baselines/discussion.py` - Discussion baseline
+- `analysis/plot_results.py` - Results visualization
+- `analysis/detect_schemes.py` - Cooperation scheme detection
+- `configs/magrpo_local.yaml` - Training configuration
+
+### ❌ NOT IMPLEMENTED
+- `notebooks/magrpo_training.ipynb` - Training notebook (directory doesn't exist)
 
 ---
 
@@ -388,15 +410,18 @@ After completing this TODO:
 After completion, you'll have:
 
 **Code (already exists)**:
-- `orchestry/marl/algorithms/magrpo.py` - MAGRPO algorithm
-- `orchestry/marl/local_inference.py` - Local LLM wrapper
-- `orchestry/marl/rewards/code_reward.py` - Reward model
-- `orchestry/tasks/code_collaboration.py` - Task environment
-- `orchestry/marl/training/magrpo_trainer.py` - Training loop
-- `orchestry/baselines/*.py` - 4 baseline methods
-- `analysis/*.py` - Analysis tools
-- `configs/magrpo_local.yaml` - Configuration
-- `notebooks/magrpo_training.ipynb` - Training notebook
+- ✅ `orchestry/marl/algorithms/magrpo.py` - MAGRPO algorithm
+- ✅ `orchestry/marl/local_inference.py` - Local LLM wrapper
+- ✅ `orchestry/marl/rewards/code_reward.py` - Reward model
+- ✅ `orchestry/marl/rewards/budget_tracker.py` - Budget tracking
+- ✅ `orchestry/tasks/code_collaboration.py` - Task environment
+- ✅ `orchestry/marl/training/magrpo_trainer.py` - Training loop
+- ✅ `orchestry/baselines/*.py` - 4 baseline methods (fixed_model, naive_concat, sequential, discussion)
+- ✅ `analysis/*.py` - Analysis tools (plot_results.py, detect_schemes.py)
+- ✅ `configs/magrpo_local.yaml` - Configuration
+
+**Code (NOT YET IMPLEMENTED)**:
+- ❌ `notebooks/magrpo_training.ipynb` - Training notebook (directory doesn't exist)
 
 **Results (you'll generate)**:
 - `checkpoints/episode_*/` - Training checkpoints
