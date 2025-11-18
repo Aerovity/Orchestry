@@ -21,9 +21,9 @@ Orchestry has been **completely rewritten** from a prompt-engineering demo into 
 - **Behavior Pattern Extraction**: Meta-learning from successful episodes
 
 ### 🎯 Production Tasks (Beyond Story Writing)
-- **Code Review** (NEW): 3 agents collaborate to write, review, and refactor code
-- **Documentation** (Coming Soon): Generate comprehensive technical docs
-- **Research Synthesis** (Coming Soon): Multi-agent research and analysis
+- **🔬 Autonomous Research Lab** (NEW): 5 agents conduct scientific research (literature review → hypothesis → experiments → analysis → paper writing)
+- **💻 Code Review**: 3 agents collaborate to write, review, and refactor code
+- **📚 Documentation** (Coming Soon): Generate comprehensive technical docs
 - Story Writing (Legacy task, still supported)
 
 ### 📊 Real Learning with Measurable Improvement
@@ -116,7 +116,37 @@ cp .env.example .env
 
 ## 🎮 Quick Start
 
-### Run Your First MARL Training
+### 🆕 NEW: Autonomous Research Lab (Recommended)
+
+Train AI agents to conduct scientific research autonomously:
+
+```bash
+# Interactive research with LLM judge (50 episodes)
+python main.py --mode research --episodes 50 --question "cats" --use-llm-judge
+
+# Quick test (2 episodes)
+python main.py --mode research --episodes 2 --question "test" --dry-run
+
+# Battery materials research
+python main.py --mode research --episodes 20 --question "battery materials" --use-llm-judge --verbose
+
+# Climate research
+python main.py --mode research --episodes 30 --question "carbon capture materials" --show-best
+```
+
+**Features**:
+- 🤖 5 specialized research agents (Literature Synthesizer, Hypothesis Generator, etc.)
+- 🧪 Multi-episode training with MARL
+- 🎯 LLM-as-Judge reward system (Claude evaluates research quality)
+- 📊 Interactive question flow (objective, context, metrics)
+- 📝 Generates complete research papers
+- 💾 Structured output: `runs/research_lab_*/`
+
+See [RESEARCH_LAB_GUIDE.md](RESEARCH_LAB_GUIDE.md) for detailed documentation.
+
+---
+
+### Run Your First MARL Training (Code Review)
 
 ```bash
 # Using the CLI commands (recommended)

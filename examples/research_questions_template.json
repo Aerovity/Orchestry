@@ -1,0 +1,70 @@
+[
+  {
+    "topic": "Biodegradable plastic alternatives from agricultural waste",
+    "domain": "materials_science",
+    "context": "Current plastics take 500+ years to decompose. Agricultural waste (corn husks, rice straw) is abundant but underutilized. Bio-based plastics exist but are expensive.",
+    "objective": "Design biodegradable polymer from agricultural waste with mechanical properties similar to HDPE and <2 year decomposition time",
+    "success_metrics": [
+      "tensile strength (MPa)",
+      "decomposition time (months)",
+      "production cost ($/kg)",
+      "water resistance"
+    ],
+    "key_papers": [
+      "PLA (polylactic acid) from corn starch - biodegradable but low strength",
+      "PHB (polyhydroxybutyrate) from bacteria - strong but expensive",
+      "Cellulose nanofibers from wood - strong but difficult processing"
+    ]
+  },
+  {
+    "topic": "AI-designed antibodies for cancer immunotherapy",
+    "domain": "protein",
+    "context": "Current antibody discovery takes 2-5 years. Cancer cells express unique surface markers (neoantigens). Need antibodies that bind specifically to cancer cells.",
+    "objective": "Design antibody with high affinity (Kd < 1 nM) to specific cancer neoantigen and minimal off-target binding",
+    "success_metrics": [
+      "binding affinity Kd (nM)",
+      "selectivity ratio",
+      "thermal stability Tm (°C)",
+      "production yield (mg/L)"
+    ],
+    "key_papers": [
+      "Pembrolizumab (Keytruda) - anti-PD1, Kd ~0.3 nM",
+      "Trastuzumab (Herceptin) - anti-HER2, Kd ~5 nM",
+      "CAR-T cell therapy - uses engineered T cells, not antibodies"
+    ]
+  },
+  {
+    "topic": "Low-cost hydrogen production from seawater",
+    "domain": "climate",
+    "context": "Green hydrogen requires freshwater electrolysis. Freshwater is scarce in many regions. Seawater is abundant but contains corrosive chlorides that damage electrodes.",
+    "objective": "Design electrocatalyst that splits seawater with >80% efficiency, resistant to chloride corrosion for >1000 hours",
+    "success_metrics": [
+      "hydrogen evolution efficiency (%)",
+      "chloride corrosion resistance (hours)",
+      "overpotential (V)",
+      "catalyst cost ($/kg)"
+    ],
+    "key_papers": [
+      "Platinum catalysts - high efficiency but expensive and corrode",
+      "NiFe layered double hydroxides - cheap but low seawater stability",
+      "Transition metal nitrides - moderate efficiency, better corrosion resistance"
+    ]
+  },
+  {
+    "topic": "Room-temperature quantum computing materials",
+    "domain": "physics",
+    "context": "Current quantum computers require cooling to millikelvin temperatures (expensive, bulky). Some materials show quantum effects at higher temperatures. Need materials that maintain quantum coherence at room temperature.",
+    "objective": "Predict materials with quantum coherence times >1 millisecond at 300K",
+    "success_metrics": [
+      "coherence time T2 (ms)",
+      "operating temperature (K)",
+      "qubit density (qubits/cm³)",
+      "synthesis feasibility"
+    ],
+    "key_papers": [
+      "Nitrogen-vacancy centers in diamond - T2 ~2ms at 300K, but low density",
+      "Silicon carbide defects - T2 ~0.5ms at 300K",
+      "Topological qubits - theoretical, not yet demonstrated at 300K"
+    ]
+  }
+]

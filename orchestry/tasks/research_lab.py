@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from .base import BaseTask
+from .base import BaseTask, TaskConfig
 
 
 class ResearchLabTask(BaseTask):
@@ -40,6 +40,8 @@ class ResearchLabTask(BaseTask):
         max_turns: int = 15,
         require_novelty: bool = True,
         use_real_data: bool = False,
+        custom_problems: list[dict[str, Any]] | None = None,
+        config: TaskConfig | None = None,
     ) -> None:
         """
         Initialize research lab task.
@@ -49,8 +51,14 @@ class ResearchLabTask(BaseTask):
             max_turns: Maximum conversation turns
             require_novelty: Whether to penalize non-novel hypotheses
             use_real_data: Whether to use real datasets (requires API access)
+            custom_problems: User-provided research problems (overrides built-in problems)
+            config: Task configuration (optional)
         """
-        super().__init__()
+        # Initialize base class with config
+        if config is None:
+            config = TaskConfig(max_turns=max_turns, task_type="research_lab")
+        super().__init__(config)
+
         self.domain = domain
         self.max_turns = max_turns
         self.require_novelty = require_novelty
@@ -65,8 +73,11 @@ class ResearchLabTask(BaseTask):
             "paper_writer",
         ]
 
-        # Load domain-specific research problems
-        self.research_problems = self._load_research_problems()
+        # Load research problems (custom or built-in)
+        if custom_problems:
+            self.research_problems = custom_problems
+        else:
+            self.research_problems = self._load_research_problems()
 
         # Track research progress
         self.current_problem: dict[str, Any] = {}
@@ -205,7 +216,7 @@ class ResearchLabTask(BaseTask):
 
     def step(
         self, agent_id: int, agent_role: str, action: str
-    ) -> tuple[dict[str, Any], bool, dict[str, Any]]:
+    ) -> tuple[dict[str, Any], bool]:
         """
         Execute agent action and return observation.
 
@@ -215,9 +226,8 @@ class ResearchLabTask(BaseTask):
             action: Agent's contribution (text)
 
         Returns:
-            observation: Updated research state
+            observation: Updated research state (includes info in observation dict)
             done: Whether research is complete
-            info: Additional information
         """
         self.turn_count += 1
 
@@ -239,7 +249,7 @@ class ResearchLabTask(BaseTask):
         # Check if done
         done = self._is_research_complete()
 
-        # Create observation
+        # Create observation (includes info)
         observation = {
             "topic": self.current_problem["topic"],
             "current_phase": phase,
@@ -249,14 +259,11 @@ class ResearchLabTask(BaseTask):
             "analyses_completed": len(self.analyses_completed),
             "paper_draft_length": len(self.paper_draft),
             "turn_count": self.turn_count,
-        }
-
-        info = {
             "last_action_role": agent_role,
             "phase_progress": self._calculate_phase_progress(),
         }
 
-        return observation, done, info
+        return observation, done
 
     def _process_literature_synthesis(self, action: str) -> None:
         """Process literature synthesis contribution."""
@@ -574,3 +581,7 @@ Write clearly and concisely in scientific style.""",
         }
 
         return base_prompt + role_instructions.get(agent_role, "")
+
+    def is_done(self) -> bool:
+        """Check if research episode is complete."""
+        return self._is_research_complete()
