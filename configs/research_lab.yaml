@@ -1,0 +1,272 @@
+# Autonomous Research Lab Configuration
+# Multi-agent system for scientific research
+
+# ============================================================================
+# Task Configuration
+# ============================================================================
+task:
+  type: "research_lab"
+  domain: "materials_science"  # Options: materials_science, climate, protein, physics
+  max_turns: 20
+  require_novelty: true
+  use_real_data: false  # Set to true to use real scientific databases (requires API keys)
+
+# ============================================================================
+# Agent Configuration - 5 Specialized Research Agents
+# ============================================================================
+agents:
+  num_agents: 5
+  roles:
+    - literature_synthesizer
+    - hypothesis_generator
+    - experimental_designer
+    - data_analyst
+    - paper_writer
+
+  model: "claude-3-5-sonnet-20241022"
+  temperature: 0.7
+  max_tokens: 1024
+
+# ============================================================================
+# MARL Training Configuration
+# ============================================================================
+marl:
+  algorithm: "api_grpo"  # Group Relative Policy Optimization
+  beam_width: 8          # Explore 8 research trajectories in parallel
+  k_samples: 4           # 4 response candidates per agent per turn
+  episodes: 50           # Number of research problems to solve
+
+  # Exploration vs Exploitation
+  temperature: 0.8
+  exploration_rate: 0.15  # Higher exploration for creative research
+
+  # Learning rate
+  learning_rate: 0.001
+
+  # Value estimation
+  use_centralized_critic: true
+  critic_model: "claude-3-5-sonnet-20241022"
+
+# ============================================================================
+# Reward Configuration - Scientific Research Metrics
+# ============================================================================
+rewards:
+  # Reward component weights (must sum to 1.0)
+  scientific_rigor_weight: 0.25    # Proper methodology, citations
+  novelty_weight: 0.25             # Novel hypotheses and approaches
+  completeness_weight: 0.20        # All research phases completed
+  collaboration_weight: 0.15       # Agents building on each other
+  feasibility_weight: 0.15         # Realistic experimental designs
+
+  # Bonus rewards
+  novel_hypothesis_bonus: 2.0      # Bonus for truly novel ideas
+  complete_paper_bonus: 3.0        # Bonus for complete research paper
+  cross_reference_bonus: 0.5       # Bonus for referencing other agents
+
+  # Penalties
+  repetition_penalty: -1.0         # Penalty for repeating existing work
+  unrealistic_penalty: -2.0        # Penalty for infeasible experiments
+
+# ============================================================================
+# Training Optimization
+# ============================================================================
+training:
+  # Checkpointing
+  checkpoint_frequency: 10  # Save every 10 episodes
+  save_best_only: false
+
+  # Logging
+  log_frequency: 1
+  verbose: true
+
+  # Performance
+  batch_size: 4
+  parallel_envs: 1
+  cache_enabled: true
+
+  # Early stopping
+  early_stopping: true
+  patience: 20
+  min_improvement: 0.01
+
+# ============================================================================
+# Domain-Specific Parameters
+# ============================================================================
+domains:
+  materials_science:
+    focus_areas:
+      - "solid-state batteries"
+      - "catalysts for CO2 reduction"
+      - "hydrogen storage materials"
+      - "photovoltaic materials"
+
+    success_metrics:
+      - "ionic conductivity (S/cm)"
+      - "faradaic efficiency (%)"
+      - "overpotential (V)"
+      - "stability (cycles)"
+
+    literature_sources:
+      - "Nature Materials"
+      - "Advanced Materials"
+      - "Journal of Materials Chemistry A"
+
+  climate:
+    focus_areas:
+      - "direct air capture"
+      - "carbon sequestration"
+      - "renewable materials"
+      - "climate modeling"
+
+    success_metrics:
+      - "CO2 uptake capacity (mmol/g)"
+      - "regeneration temperature (°C)"
+      - "cycling stability"
+      - "material cost ($/kg)"
+
+  protein:
+    focus_areas:
+      - "de novo enzyme design"
+      - "protein folding prediction"
+      - "drug target discovery"
+      - "antibody engineering"
+
+    success_metrics:
+      - "catalytic rate kcat (s^-1)"
+      - "thermal stability Tm (°C)"
+      - "binding affinity Kd (nM)"
+      - "stability over time"
+
+  physics:
+    focus_areas:
+      - "room-temperature superconductors"
+      - "quantum materials"
+      - "topological insulators"
+      - "fusion materials"
+
+    success_metrics:
+      - "critical temperature Tc (K)"
+      - "required pressure (GPa)"
+      - "material stability"
+      - "synthesis feasibility"
+
+# ============================================================================
+# Behavior Library - Meta-Learning Patterns
+# ============================================================================
+meta_learning:
+  enabled: true
+  update_frequency: 10  # Update prompts every 10 episodes
+  top_k_episodes: 5     # Learn from top 5 episodes
+
+  # Patterns to extract
+  patterns:
+    - "effective_literature_synthesis"
+    - "novel_hypothesis_generation"
+    - "rigorous_experimental_design"
+    - "insightful_data_analysis"
+    - "clear_paper_writing"
+    - "cross_agent_collaboration"
+
+# ============================================================================
+# Evaluation Configuration
+# ============================================================================
+evaluation:
+  # Test set
+  test_split: 0.2
+  test_problems: 10
+
+  # Comparison baselines
+  baselines:
+    - "single_agent_gpt4"       # Single GPT-4 doing all tasks
+    - "sequential_pipeline"      # Agents work sequentially, no collaboration
+    - "human_baseline"           # Human researcher performance (if available)
+
+  # Metrics to track
+  metrics:
+    - "scientific_rigor"
+    - "novelty_score"
+    - "completeness"
+    - "collaboration_quality"
+    - "feasibility"
+    - "total_reward"
+    - "time_to_completion"
+    - "api_cost"
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+output:
+  # Save locations
+  run_dir: "runs/research_lab_{timestamp}"
+  checkpoint_dir: "checkpoints"
+  results_dir: "results"
+
+  # What to save
+  save_trajectories: true
+  save_papers: true          # Save generated research papers
+  save_hypotheses: true      # Save all hypotheses generated
+  save_experiments: true     # Save experimental designs
+
+  # Visualization
+  plot_learning_curves: true
+  plot_collaboration_networks: true
+  generate_research_reports: true
+
+# ============================================================================
+# API Configuration
+# ============================================================================
+api:
+  # Anthropic API
+  anthropic_api_key_env: "ANTHROPIC_API_KEY"
+
+  # Rate limiting
+  max_requests_per_minute: 50
+  max_tokens_per_minute: 100000
+  retry_attempts: 3
+  retry_delay: 1.0
+
+  # External research APIs (optional)
+  use_semantic_scholar: false    # For literature search
+  use_pubmed: false              # For biomedical research
+  use_arxiv: false               # For physics/CS research
+  use_materials_project: false   # For materials data
+
+# ============================================================================
+# Budget and Cost Management
+# ============================================================================
+budget:
+  # Cost limits
+  max_cost_per_episode: 2.0      # Max $2 per research problem
+  max_total_cost: 100.0          # Max $100 for entire training run
+
+  # Warnings
+  warn_at_percentage: 75         # Warn at 75% budget
+  stop_at_percentage: 100        # Stop at 100% budget
+
+  # Tracking
+  track_api_costs: true
+  log_cost_breakdown: true
+
+# ============================================================================
+# Advanced Features
+# ============================================================================
+advanced:
+  # Multi-task learning
+  multi_task_learning: false
+  task_curriculum: false         # Start with easy problems
+
+  # Human-in-the-loop
+  human_feedback: false
+  feedback_frequency: 10
+
+  # Distributed training
+  distributed: false
+  num_workers: 1
+
+  # External tools
+  use_simulation_tools: false    # Use molecular dynamics, DFT, etc.
+  use_databases: false           # Query scientific databases
+
+  # Verification
+  verify_hypotheses: false       # Auto-verify against existing literature
+  check_novelty: true            # Check if ideas are truly novel
