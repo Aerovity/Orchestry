@@ -127,13 +127,13 @@ cp .env.example .env
 Train AI agents to conduct scientific research autonomously using **Claude or Gemini**:
 
 ```bash
-# Interactive research with LLM judge (50 episodes) - uses Claude by default
+# Interactive research with LLM judge (50 episodes)
+# NOW CONFIGURED TO USE GEMINI 3 PRO (FREE during preview!)
 python main.py --mode research --episodes 50 --question "cats" --use-llm-judge
 
-# To use Gemini instead, edit configs/research_lab.yaml and set:
-# agents:
-#   provider: "gemini"
-#   model: "gemini-2.0-flash-exp"
+# Model is configured in configs/research_lab.yaml:
+# Current: Gemini 3 Pro Preview (FREE Nov-Dec 2025, then $16.50/50 episodes)
+# Alternative: Gemini 1.5 Pro ($6/50 episodes) or Claude ($42.50/50 episodes)
 
 # Quick test (2 episodes)
 python main.py --mode research --episodes 2 --question "test" --dry-run

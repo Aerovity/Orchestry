@@ -825,12 +825,52 @@ Edit `configs/research_lab.yaml`:
 ```yaml
 agents:
   provider: "gemini"  # or "claude"
-  model: "gemini-2.0-flash-exp"  # or "claude-3-5-sonnet-20241022"
+
+  # Choose your model:
+  model: "gemini-3-pro-preview"       # Latest, FREE during preview! (Nov-Dec 2025)
+  # model: "gemini-2.0-flash-exp"     # Fast, FREE
+  # model: "gemini-1.5-pro"           # Balanced, $6/50 episodes
+  # model: "gemini-1.5-flash"         # Fastest, $1/50 episodes
+  # model: "claude-3-5-sonnet-20241022"  # Premium, $42.50/50 episodes
 ```
 
 Then set the appropriate API key in `.env`:
 - For Claude: `ANTHROPIC_API_KEY=your-key`
 - For Gemini: `GEMINI_API_KEY=AIzaSyDqyCH4QpQ-y_nEWCpw2ZBfiFOPF0ieB6I`
+
+**Model Comparison**:
+
+| Model | Cost (50 episodes) | Speed | Quality | Best For |
+|-------|-------------------|-------|---------|----------|
+| **Gemini 3 Pro Preview** ⭐ | **FREE** (then $16.50) | Medium | Excellent | Advanced research, FREE trial |
+| **Gemini 2.0 Flash-Exp** | **FREE** | Fast | Good | Testing, high volume |
+| **Gemini 1.5 Pro** | $6.00 | Medium | Very Good | Production, best value |
+| **Gemini 1.5 Flash** | $1.00 | Fastest | Good | Speed-critical tasks |
+| **Claude 3.5 Sonnet** | $42.50 | Medium | Excellent | Premium quality |
+
+**✨ Recommendation**: Use **Gemini 3 Pro Preview** - it's FREE during preview (Nov-Dec 2025) and has the latest capabilities!
+
+---
+
+### 🎯 What is Batch Processing?
+
+**Batch Processing** = Submit many requests at once, get responses later, save 50% on costs.
+
+**How it works**:
+- **Normal API**: Send 1 request → wait 2 seconds → get response → repeat
+- **Batch API**: Send 100 requests together → wait 10 minutes → get all responses at once
+
+**Cost savings**:
+- Gemini 3 Pro Normal: $2 input, $12 output per 1M tokens
+- Gemini 3 Pro Batch: $1 input, $6 output per 1M tokens (50% cheaper!)
+
+**When to use**:
+- ✅ Processing large datasets overnight
+- ✅ Analyzing many research papers at once
+- ✅ Generating reports in bulk
+- ❌ **NOT for Research Lab** - we need real-time responses during training
+
+**Note**: Current Research Lab implementation uses standard API (not batch) because agents need to respond immediately during each training turn
 
 ---
 
