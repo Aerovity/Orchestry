@@ -1,20 +1,21 @@
 """
 LLM-as-Judge Reward Model for Research Lab
 
-Uses Claude to evaluate research quality instead of heuristic rules.
+Uses Claude or Gemini to evaluate research quality instead of heuristic rules.
 More accurate but costs ~$0.05 per evaluation.
 """
 
 from typing import Any
 
 from anthropic import Anthropic
+import google.generativeai as genai
 
 
 class ResearchRewardModel:
     """
     LLM-based reward model for research evaluation.
 
-    Uses Claude Sonnet to judge research quality on 5 dimensions:
+    Uses Claude Sonnet or Gemini to judge research quality on 5 dimensions:
     - Scientific rigor
     - Novelty
     - Completeness
@@ -22,16 +23,35 @@ class ResearchRewardModel:
     - Feasibility
     """
 
-    def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022") -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "claude-3-5-sonnet-20241022",
+        provider: str = "claude",
+        gemini_api_key: str | None = None,
+    ) -> None:
         """
         Initialize reward model.
 
         Args:
-            api_key: Anthropic API key
-            model: Claude model to use for evaluation
+            api_key: Anthropic API key (for Claude)
+            model: Model to use for evaluation
+            provider: "claude" or "gemini"
+            gemini_api_key: Google Gemini API key (if using Gemini)
         """
-        self.client = Anthropic(api_key=api_key)
+        self.provider = provider.lower()
         self.model = model
+
+        if self.provider == "claude":
+            self.client = Anthropic(api_key=api_key)
+        elif self.provider == "gemini":
+            if gemini_api_key:
+                genai.configure(api_key=gemini_api_key)
+            elif api_key:
+                genai.configure(api_key=api_key)
+            self.client = genai.GenerativeModel(model or "gemini-2.0-flash-exp")
+        else:
+            raise ValueError(f"Unknown provider: {provider}. Use 'claude' or 'gemini'")
 
     def evaluate_research(
         self,
@@ -45,7 +65,7 @@ class ResearchRewardModel:
         paper_draft: str,
     ) -> dict[str, float]:
         """
-        Evaluate research quality using Claude as judge.
+        Evaluate research quality using Claude or Gemini as judge.
 
         Args:
             topic: Research topic
@@ -72,16 +92,28 @@ class ResearchRewardModel:
             paper_draft=paper_draft,
         )
 
-        # Get Claude's evaluation
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=1024,
-            temperature=0.0,  # Deterministic scoring
-            messages=[{"role": "user", "content": prompt}],
-        )
+        # Get LLM evaluation based on provider
+        if self.provider == "claude":
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                temperature=0.0,  # Deterministic scoring
+                messages=[{"role": "user", "content": prompt}],
+            )
+            response_text = response.content[0].text
+        elif self.provider == "gemini":
+            response = self.client.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.0, max_output_tokens=1024
+                ),
+            )
+            response_text = response.text
+        else:
+            raise ValueError(f"Unknown provider: {self.provider}")
 
         # Parse scores from response
-        scores = self._parse_scores(response.content[0].text)
+        scores = self._parse_scores(response_text)
 
         return scores
 
@@ -96,7 +128,7 @@ class ResearchRewardModel:
         analyses: list[str],
         paper_draft: str,
     ) -> str:
-        """Build evaluation prompt for Claude."""
+        """Build evaluation prompt for Claude or Gemini."""
         # Format trajectory
         trajectory_text = "\n\n".join(
             f"**{turn.get('role', 'agent').replace('_', ' ').title()}:**\n{turn.get('action', '')}"
@@ -197,7 +229,7 @@ Provide decimal scores (e.g., 7.5) for precision.
         return prompt
 
     def _parse_scores(self, response_text: str) -> dict[str, float]:
-        """Parse scores from Claude's response."""
+        """Parse scores from Claude or Gemini response."""
         scores = {
             "scientific_rigor": 5.0,
             "novelty": 5.0,
@@ -241,16 +273,36 @@ class HybridRewardModel:
     - Balances cost vs accuracy
     """
 
-    def __init__(self, api_key: str, use_llm_for_final: bool = True) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        use_llm_for_final: bool = True,
+        provider: str = "claude",
+        model: str | None = None,
+        gemini_api_key: str | None = None,
+    ) -> None:
         """
         Initialize hybrid model.
 
         Args:
-            api_key: Anthropic API key
+            api_key: API key (Anthropic for Claude, or Google for Gemini)
             use_llm_for_final: Whether to use LLM for final evaluation
+            provider: "claude" or "gemini"
+            model: Model name (optional, defaults per provider)
+            gemini_api_key: Separate Gemini API key if needed
         """
-        self.llm_judge = ResearchRewardModel(api_key) if use_llm_for_final else None
         self.use_llm_for_final = use_llm_for_final
+        self.provider = provider
+
+        if use_llm_for_final:
+            self.llm_judge = ResearchRewardModel(
+                api_key=api_key,
+                model=model or ("claude-3-5-sonnet-20241022" if provider == "claude" else "gemini-2.0-flash-exp"),
+                provider=provider,
+                gemini_api_key=gemini_api_key,
+            )
+        else:
+            self.llm_judge = None
 
     def evaluate_intermediate(self, task: Any) -> dict[str, float]:
         """

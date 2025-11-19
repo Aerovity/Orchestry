@@ -23,7 +23,9 @@ agents:
     - data_analyst
     - paper_writer
 
-  model: "claude-3-5-sonnet-20241022"
+  # Choose provider: "claude" or "gemini"
+  provider: "claude"
+  model: "claude-3-5-sonnet-20241022"  # or "gemini-2.0-flash-exp" for Gemini
   temperature: 0.7
   max_tokens: 1024
 
@@ -216,8 +218,9 @@ output:
 # API Configuration
 # ============================================================================
 api:
-  # Anthropic API
-  anthropic_api_key_env: "ANTHROPIC_API_KEY"
+  # LLM API Configuration
+  anthropic_api_key_env: "ANTHROPIC_API_KEY"  # Claude API key
+  gemini_api_key_env: "GEMINI_API_KEY"        # Google Gemini API key (AIzaSyDqyCH4QpQ-y_nEWCpw2ZBfiFOPF0ieB6I)
 
   # Rate limiting
   max_requests_per_minute: 50

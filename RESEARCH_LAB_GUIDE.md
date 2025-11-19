@@ -736,11 +736,13 @@ if hypothesis_count >= 2: score += 2
 
 ---
 
-### LLM-as-Judge (Claude Evaluates)
+### LLM-as-Judge (Claude or Gemini Evaluates)
 
-**How it works**: Claude reads the entire research episode and judges quality
+**How it works**: An LLM (Claude or Gemini) reads the entire research episode and judges quality
 
-**Evaluation Prompt** (sent to Claude):
+**Supported models**: Claude 3.5 Sonnet or Gemini 2.0 Flash
+
+**Evaluation Prompt** (sent to the LLM):
 ```
 You are a scientific peer reviewer evaluating AI-generated research.
 
@@ -817,6 +819,18 @@ Respond with JSON:
 - Production training (50+ episodes)
 - When accuracy matters more than cost
 - Final evaluation of best episodes
+
+**How to choose between Claude and Gemini**:
+Edit `configs/research_lab.yaml`:
+```yaml
+agents:
+  provider: "gemini"  # or "claude"
+  model: "gemini-2.0-flash-exp"  # or "claude-3-5-sonnet-20241022"
+```
+
+Then set the appropriate API key in `.env`:
+- For Claude: `ANTHROPIC_API_KEY=your-key`
+- For Gemini: `GEMINI_API_KEY=AIzaSyDqyCH4QpQ-y_nEWCpw2ZBfiFOPF0ieB6I`
 
 ---
 
