@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import anthropic
+import google.generativeai as genai
 import numpy as np
 from anthropic.types import TextBlock
 from numpy.typing import NDArray
@@ -111,33 +112,53 @@ class APIGroupRelativePolicyOptimizer:
         agents: list[Agent],
         api_key: str,
         config: dict[str, Any] | None = None,
+        provider: str = "claude",
+        gemini_api_key: str | None = None,
     ) -> None:
         """Initialize GRPO optimizer.
 
         Args:
             agents: List of agents
-            api_key: Anthropic API key
+            api_key: API key (Anthropic for Claude, Google for Gemini)
             config: Configuration dictionary
+            provider: "claude" or "gemini"
+            gemini_api_key: Separate Gemini API key if needed
 
         """
         self.agents = agents
         self.num_agents = len(agents)
-        self.client = anthropic.Anthropic(api_key=api_key)
+        self.provider = provider.lower()
 
         # Configuration
         config = config or {}
         self.k_samples = config.get("k_samples", 5)
         self.temperature = config.get("temperature", 0.8)
-        self.model = config.get("model", "claude-3-5-sonnet-20241022")
+        self.model = config.get("model")
         self.max_tokens = config.get("max_tokens", 1024)
         self.rate_limit_delay = config.get("rate_limit_delay", 0.5)
+
+        # Initialize client based on provider
+        if self.provider == "claude":
+            self.client = anthropic.Anthropic(api_key=api_key)
+            if not self.model:
+                self.model = "claude-3-5-sonnet-20241022"
+        elif self.provider == "gemini":
+            if gemini_api_key:
+                genai.configure(api_key=gemini_api_key)
+            elif api_key:
+                genai.configure(api_key=api_key)
+            if not self.model:
+                self.model = "gemini-2.0-flash-exp"
+            self.client = genai.GenerativeModel(self.model)
+        else:
+            raise ValueError(f"Unknown provider: {provider}. Use 'claude' or 'gemini'")
 
         # Response cache
         self.cache = ResponseCache(max_size=config.get("cache_size", 1000))
 
         logger.info(
-            f"Initialized GRPO with {self.num_agents} agents, "
-            f"k={self.k_samples}, temp={self.temperature}",
+            f"Initialized GRPO with {self.num_agents} agents using {self.provider}, "
+            f"k={self.k_samples}, temp={self.temperature}, model={self.model}",
         )
 
     def generate_response_samples(
@@ -182,19 +203,35 @@ class APIGroupRelativePolicyOptimizer:
 
                 logger.debug(f"Generating sample {i + 1}/{k} for agent {agent.role}")
 
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=self.max_tokens,
-                    temperature=self.temperature,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": context}],
-                )
+                # Generate based on provider
+                if self.provider == "claude":
+                    response = self.client.messages.create(
+                        model=self.model,
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        system=system_prompt,
+                        messages=[{"role": "user", "content": context}],
+                    )
 
-                content_block = response.content[0]
-                if isinstance(content_block, TextBlock):
-                    sample_text = content_block.text
+                    content_block = response.content[0]
+                    if isinstance(content_block, TextBlock):
+                        sample_text = content_block.text
+                    else:
+                        sample_text = str(content_block)
+                elif self.provider == "gemini":
+                    # Combine system prompt and context for Gemini
+                    full_prompt = f"{system_prompt}\n\n{context}"
+                    response = self.client.generate_content(
+                        full_prompt,
+                        generation_config=genai.types.GenerationConfig(
+                            temperature=self.temperature,
+                            max_output_tokens=self.max_tokens,
+                        ),
+                    )
+                    sample_text = response.text
                 else:
-                    sample_text = str(content_block)
+                    raise ValueError(f"Unknown provider: {self.provider}")
+
                 samples.append(sample_text)
 
             except Exception as e:

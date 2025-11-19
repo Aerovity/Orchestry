@@ -240,7 +240,9 @@ def print_config_summary(config: dict, args: argparse.Namespace, research_proble
     table.add_row("Max Turns per Episode", str(config["task"]["max_turns"]))
 
     if args.use_llm_judge:
-        table.add_row("Reward System", "LLM-as-Judge (Claude)", style="bold green")
+        provider = config.get("agents", {}).get("provider", "claude")
+        provider_name = "Claude" if provider == "claude" else "Gemini"
+        table.add_row("Reward System", f"LLM-as-Judge ({provider_name})", style="bold green")
     else:
         table.add_row("Reward System", "Heuristic (keyword-based)", style="yellow")
 
@@ -265,11 +267,16 @@ def create_research_task(research_problem: dict, config: dict) -> ResearchLabTas
     return task
 
 
-def create_llm_judge(api_key: str) -> ResearchRewardModel:
+def create_llm_judge(api_key: str, provider: str = "claude", gemini_api_key: str | None = None) -> ResearchRewardModel:
     """Create LLM-as-judge reward model."""
     try:
-        reward_model = ResearchRewardModel(api_key=api_key)
-        console.print("[green]✓[/green] Initialized LLM Judge (Claude Sonnet)")
+        reward_model = ResearchRewardModel(
+            api_key=api_key,
+            provider=provider,
+            gemini_api_key=gemini_api_key
+        )
+        provider_name = "Claude Sonnet" if provider == "claude" else "Gemini"
+        console.print(f"[green]✓[/green] Initialized LLM Judge ({provider_name})")
         return reward_model
     except Exception as e:
         console.print(f"[red]Error initializing LLM judge: {e}[/red]")
@@ -606,17 +613,32 @@ Examples:
     console.print()
     print_config_summary(config, args, research_problem)
 
-    # Check for API key
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        console.print("[red]Error: ANTHROPIC_API_KEY not set[/red]")
-        console.print("Set it in .env file or environment variable")
+    # Check for API keys based on provider
+    provider = config.get("agents", {}).get("provider", "claude")
+
+    if provider == "claude":
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            console.print("[red]Error: ANTHROPIC_API_KEY not set[/red]")
+            console.print("Set it in .env file or environment variable")
+            sys.exit(1)
+        gemini_api_key = None
+    elif provider == "gemini":
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            console.print("[red]Error: GEMINI_API_KEY not set[/red]")
+            console.print("Set it in .env file or environment variable")
+            sys.exit(1)
+        api_key = gemini_api_key
+    else:
+        console.print(f"[red]Error: Unknown provider: {provider}[/red]")
+        console.print("Set provider to 'claude' or 'gemini' in config file")
         sys.exit(1)
 
     # Create LLM judge if requested
     llm_judge = None
     if args.use_llm_judge:
-        llm_judge = create_llm_judge(api_key)
+        llm_judge = create_llm_judge(api_key, provider, gemini_api_key)
 
     # Create task
     task = create_research_task(research_problem, config)

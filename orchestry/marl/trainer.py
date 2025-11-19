@@ -43,20 +43,26 @@ class MARLTrainer:
         agents: list[Agent],
         api_key: str,
         config: dict[str, Any] | None = None,
+        provider: str = "claude",
+        gemini_api_key: str | None = None,
     ) -> None:
         """Initialize MARL trainer.
 
         Args:
             task: Task instance
             agents: List of agents
-            api_key: Anthropic API key
+            api_key: API key (Anthropic for Claude, Google for Gemini)
             config: Configuration dictionary
+            provider: "claude" or "gemini"
+            gemini_api_key: Separate Gemini API key if needed
 
         """
         self.task = task
         self.agents = agents
         self.num_agents = len(agents)
         self.api_key = api_key
+        self.provider = provider
+        self.gemini_api_key = gemini_api_key
 
         # Default configuration
         self.config: dict[str, Any] = config or {}
@@ -65,10 +71,18 @@ class MARLTrainer:
         self.exploration_rate: float = self.config.get("exploration_rate", 0.1)
         self.learning_frequency: int = self.config.get("learning_frequency", 5)
 
-        # Initialize components
-        self.grpo = APIGroupRelativePolicyOptimizer(agents=agents, api_key=api_key, config=config)
+        # Initialize components with provider support
+        self.grpo = APIGroupRelativePolicyOptimizer(
+            agents=agents,
+            api_key=api_key,
+            config=config,
+            provider=provider,
+            gemini_api_key=gemini_api_key
+        )
 
         model_name: str = self.config.get("model", "claude-sonnet-4-20250514")
+        # Note: Value estimator and behavior library still use Claude for now
+        # Can be extended to support Gemini in future
         self.value_estimator = CentralizedValueEstimator(api_key=api_key, model=model_name)
 
         self.behavior_library = BehaviorLibrary(api_key=api_key, model=model_name)

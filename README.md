@@ -75,7 +75,9 @@ Think of it as: **"MARL-guided Monte Carlo Tree Search over conversation space"*
 ### Prerequisites
 - Python 3.11 or higher
 - [uv](https://github.com/astral-sh/uv) package manager (recommended) or pip
-- Anthropic API key ([Get one here](https://console.anthropic.com/))
+- LLM API key:
+  - Anthropic API key for Claude ([Get one here](https://console.anthropic.com/))
+  - **OR** Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
 
 ### Quick Setup (Recommended - using uv)
 
@@ -91,7 +93,9 @@ uv pip install -e ".[dev]"
 
 # Set up API key
 cp .env.example .env
-# Edit .env and add: ANTHROPIC_API_KEY=your-key-here
+# Edit .env and add your API key:
+# For Claude: ANTHROPIC_API_KEY=your-key-here
+# For Gemini: GEMINI_API_KEY=your-key-here
 
 # Install pre-commit hooks (optional but recommended)
 pre-commit install
@@ -109,7 +113,9 @@ pip install -e ".[dev]"
 
 # Set up API key
 cp .env.example .env
-# Edit .env and add: ANTHROPIC_API_KEY=your-key-here
+# Edit .env and add your API key:
+# For Claude: ANTHROPIC_API_KEY=your-key-here
+# For Gemini: GEMINI_API_KEY=your-key-here
 ```
 
 ---
@@ -118,11 +124,16 @@ cp .env.example .env
 
 ### 🆕 NEW: Autonomous Research Lab (Recommended)
 
-Train AI agents to conduct scientific research autonomously:
+Train AI agents to conduct scientific research autonomously using **Claude or Gemini**:
 
 ```bash
 # Interactive research with LLM judge (50 episodes)
+# NOW CONFIGURED TO USE GEMINI 3 PRO (FREE during preview!)
 python main.py --mode research --episodes 50 --question "cats" --use-llm-judge
+
+# Model is configured in configs/research_lab.yaml:
+# Current: Gemini 3 Pro Preview (FREE Nov-Dec 2025, then $16.50/50 episodes)
+# Alternative: Gemini 1.5 Pro ($6/50 episodes) or Claude ($42.50/50 episodes)
 
 # Quick test (2 episodes)
 python main.py --mode research --episodes 2 --question "test" --dry-run

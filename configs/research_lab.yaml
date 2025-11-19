@@ -23,7 +23,20 @@ agents:
     - data_analyst
     - paper_writer
 
-  model: "claude-3-5-sonnet-20241022"
+  # Choose provider: "claude" or "gemini"
+  provider: "gemini"  # CHANGED TO GEMINI
+
+  # Model options:
+  # Claude models:
+  #   - "claude-3-5-sonnet-20241022" (Premium, $42.50/50 episodes)
+  #
+  # Gemini models (recommended):
+  #   - "gemini-3-pro-preview" (Latest, best quality, $16.50/50 episodes, FREE during preview!)
+  #   - "gemini-2.0-flash-exp" (Fast, FREE, good for testing)
+  #   - "gemini-1.5-pro" (Balanced, $6/50 episodes)
+  #   - "gemini-1.5-flash" (Fastest, $1/50 episodes)
+
+  model: "gemini-3-pro-preview"  # USING GEMINI 3 PRO (FREE DURING PREVIEW!)
   temperature: 0.7
   max_tokens: 1024
 
@@ -216,8 +229,9 @@ output:
 # API Configuration
 # ============================================================================
 api:
-  # Anthropic API
-  anthropic_api_key_env: "ANTHROPIC_API_KEY"
+  # LLM API Configuration
+  anthropic_api_key_env: "ANTHROPIC_API_KEY"  # Claude API key
+  gemini_api_key_env: "GEMINI_API_KEY"        # Google Gemini API key (AIzaSyDqyCH4QpQ-y_nEWCpw2ZBfiFOPF0ieB6I)
 
   # Rate limiting
   max_requests_per_minute: 50

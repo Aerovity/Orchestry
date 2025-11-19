@@ -23,11 +23,19 @@ pip install -r requirements.txt
 # Copy example environment file
 cp .env.example .env
 
-# Edit .env and add your Anthropic API key
+# Edit .env and add your API key
+# For Claude:
 # ANTHROPIC_API_KEY=sk-ant-...
+#
+# For Gemini:
+# GEMINI_API_KEY=AIzaSy...
 ```
 
-Get your API key at: https://console.anthropic.com/
+Get your API keys at:
+- Claude: https://console.anthropic.com/
+- Gemini: https://makersuite.google.com/app/apikey
+
+**Note**: You can use either Claude or Gemini for research lab. Configure the provider in `configs/research_lab.yaml`:
 
 ## Step 3: Test Installation (1 minute)
 
