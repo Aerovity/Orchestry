@@ -203,6 +203,14 @@ class ResearchLabTask(BaseTask):
         self.paper_draft = ""
         self.turn_count = 0
 
+        # Build task description for trainer
+        task_description = (
+            f"Research Topic: {self.current_problem['topic']}\n"
+            f"Objective: {self.current_problem['objective']}\n"
+            f"Context: {self.current_problem['context']}\n"
+            f"Success Metrics: {', '.join(self.current_problem['success_metrics'])}"
+        )
+
         # Initial observation for all agents
         initial_obs = {
             "topic": self.current_problem["topic"],
@@ -210,6 +218,7 @@ class ResearchLabTask(BaseTask):
             "objective": self.current_problem["objective"],
             "success_metrics": self.current_problem["success_metrics"],
             "current_phase": "literature_review",
+            "task_description": task_description,  # Added for trainer compatibility
         }
 
         return initial_obs
@@ -249,9 +258,12 @@ class ResearchLabTask(BaseTask):
         # Check if done
         done = self._is_research_complete()
 
-        # Create observation (includes info)
+        # Create observation (includes info and full context for next agent)
         observation = {
             "topic": self.current_problem["topic"],
+            "objective": self.current_problem["objective"],
+            "context": self.current_problem["context"],
+            "success_metrics": self.current_problem["success_metrics"],
             "current_phase": phase,
             "literature_reviewed": len(self.literature_reviewed),
             "hypotheses_generated": len(self.hypotheses_generated),
@@ -261,6 +273,12 @@ class ResearchLabTask(BaseTask):
             "turn_count": self.turn_count,
             "last_action_role": agent_role,
             "phase_progress": self._calculate_phase_progress(),
+            # Include actual content for agent context
+            "literature_content": self.literature_reviewed,
+            "hypotheses_content": self.hypotheses_generated,
+            "experiments_content": self.experiments_designed,
+            "analyses_content": self.analyses_completed,
+            "paper_content": self.paper_draft,
         }
 
         return observation, done
@@ -327,12 +345,13 @@ class ResearchLabTask(BaseTask):
     def _is_research_complete(self) -> bool:
         """Check if research process is complete."""
         # Complete if all phases done or max turns reached
+        # Paper should be academic-length (3000+ chars minimum for good quality)
         all_phases_complete = (
             len(self.literature_reviewed) >= 2
             and len(self.hypotheses_generated) >= 1
             and len(self.experiments_designed) >= 1
             and len(self.analyses_completed) >= 1
-            and len(self.paper_draft) >= 500
+            and len(self.paper_draft) >= 3000  # Academic-length paper requirement
         )
 
         return all_phases_complete or self.turn_count >= self.max_turns
@@ -445,10 +464,16 @@ class ResearchLabTask(BaseTask):
             score += 2.0
         if len(self.analyses_completed) >= 1:
             score += 2.0
-        if len(self.paper_draft) >= 500:
-            score += 2.0
 
-        return score
+        # Paper length scoring (academic papers should be 3000-5000+ characters)
+        if len(self.paper_draft) >= 500:
+            score += 1.0
+        if len(self.paper_draft) >= 3000:
+            score += 2.0  # Bonus for academic-length paper
+        if len(self.paper_draft) >= 5000:
+            score += 1.0  # Additional bonus for comprehensive paper
+
+        return min(10.0, score)
 
     def _calculate_collaboration_score(self, trajectory: list[dict[str, Any]]) -> float:
         """Calculate how well agents collaborated."""
@@ -536,48 +561,86 @@ Progress:
             "literature_synthesizer": """Your role: Synthesize existing research literature.
 
 Tasks:
-1. Identify key findings from the provided papers
-2. Highlight gaps in current knowledge
-3. Summarize state-of-the-art approaches
-4. Provide context for hypothesis generation
+1. Review research papers from the key papers provided
+2. Extract key findings with quantitative results (e.g., "35% protein content")
+3. Identify gaps in current knowledge - what's missing or unexplored
+4. Summarize state-of-the-art in 1-2 sentences
+5. Explicitly state the research gap at the end
 
-Be concise but thorough. Focus on quantitative results and methods.""",
+Be concise but thorough. Always cite at least 2 sources with author/year.
+Focus on quantitative metrics and organize by themes, not chronologically.
+
+Output length: 200-400 words of synthesis.""",
             "hypothesis_generator": """Your role: Generate novel, testable hypotheses.
 
 Tasks:
-1. Based on literature review, identify promising directions
-2. Propose specific, testable hypotheses
-3. Explain expected outcomes
-4. Suggest metrics for validation
+1. Read the literature synthesis from the previous agent
+2. Identify the specific knowledge gaps mentioned
+3. Propose 2-3 specific, testable hypotheses that address those gaps
+4. For each hypothesis:
+   - State the prediction clearly
+   - Include quantitative expected outcomes (e.g., ">40% protein")
+   - Explain the mechanism or reasoning
+   - Specify how it will be validated
 
-Make hypotheses concrete and measurable.""",
-            "experimental_designer": """Your role: Design experiments to test hypotheses.
+Reference the literature synthesis explicitly (e.g., "Based on the gap identified...").
+Make hypotheses concrete and measurable, not vague.
 
-Tasks:
-1. Design controlled experiments
-2. Specify materials, methods, and measurements
-3. Include control groups and variables
-4. Estimate resource requirements
-
-Be realistic and specific about experimental procedures.""",
-            "data_analyst": """Your role: Analyze experimental results.
+Output length: 150-300 words per hypothesis (300-900 total).""",
+            "experimental_designer": """Your role: Design rigorous experiments to test hypotheses.
 
 Tasks:
-1. Interpret experimental data
-2. Identify trends and patterns
-3. Assess statistical significance
-4. Compare to predictions from hypotheses
+1. Read the hypotheses from the previous agent
+2. Design detailed experimental protocols for each hypothesis
+3. For each experiment specify:
+   - Materials/formulation (exact percentages/amounts)
+   - Methods (specific techniques like "Kjeldahl method for protein")
+   - Measurements and metrics
+   - Control groups (what will you compare to?)
+   - Sample size and timeline
+   - Budget estimate
+4. Ensure experiments are realistic and use established methods
 
-Provide quantitative analysis where possible.""",
-            "paper_writer": """Your role: Write research paper draft.
+Always include control groups and reference the hypotheses you're testing.
+Be specific with numbers and techniques.
+
+Output length: 300-500 words per experiment (600-1500 total).""",
+            "data_analyst": """Your role: Analyze experimental results (simulated or expected).
 
 Tasks:
-1. Synthesize all findings into coherent narrative
-2. Structure: Abstract, Introduction, Methods, Results, Discussion
-3. Highlight novel contributions
-4. Suggest future work
+1. Read the experimental design from the previous agent
+2. For each experiment, provide expected/simulated results:
+   - Measured values with error bars (e.g., "42.5% ± 0.8%")
+   - Comparison to hypotheses and targets
+   - Statistical significance (p-values when relevant)
+   - Trends and patterns
+3. Validate whether hypotheses are confirmed or rejected
+4. Identify any unexpected findings
 
-Write clearly and concisely in scientific style.""",
+Reference the experimental design and hypotheses explicitly.
+Use quantitative language and include ± error estimates.
+
+Output length: 200-400 words per analysis (400-1200 total).""",
+            "paper_writer": """Your role: Write complete research paper draft.
+
+Tasks:
+1. Read ALL previous agents' contributions (literature, hypotheses, experiments, analysis)
+2. Write a comprehensive research paper with these sections:
+   - Abstract (150-200 words): Summarize everything
+   - Introduction (300-500 words): Background, gap, objectives
+   - Hypotheses (200-300 words): From Hypothesis Generator
+   - Methods (400-600 words): From Experimental Designer
+   - Results (300-500 words): From Data Analyst
+   - Discussion (400-600 words): Significance, limitations, implications
+   - Future Work (100-200 words): What's next
+3. Reference all previous agents' work throughout
+4. Use academic scientific writing style
+5. Ensure the paper tells a complete, coherent story
+
+CRITICAL: Your output must be 3000-5000+ characters (approximately 5-10 pages).
+Papers shorter than 3000 characters will be penalized heavily.
+
+Cross-reference between sections. Use clear, concise scientific language.""",
         }
 
         return base_prompt + role_instructions.get(agent_role, "")

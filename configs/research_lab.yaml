@@ -7,7 +7,7 @@
 task:
   type: "research_lab"
   domain: "materials_science"  # Options: materials_science, climate, protein, physics
-  max_turns: 20
+  max_turns: 15  # BALANCED: Each agent gets 3 turns for quality research
   require_novelty: true
   use_real_data: false  # Set to true to use real scientific databases (requires API keys)
 
@@ -31,12 +31,13 @@ agents:
   #   - "claude-3-5-sonnet-20241022" (Premium, $42.50/50 episodes)
   #
   # Gemini models (recommended):
-  #   - "gemini-3-pro-preview" (Latest, best quality, $16.50/50 episodes, FREE during preview!)
-  #   - "gemini-2.0-flash-exp" (Fast, FREE, good for testing)
+  #   - "gemini-2.0-flash-exp" (Fast, FREE but 10 RPM limit - TOO SLOW)
+  #   - "gemini-2.0-flash-thinking-exp" (Latest with reasoning, FREE!)
   #   - "gemini-1.5-pro" (Balanced, $6/50 episodes)
-  #   - "gemini-1.5-flash" (Fastest, $1/50 episodes)
+  #   - "gemini-1.5-flash" (Fastest, $1/50 episodes, 1000 RPM on paid tier) BEST
+  #   - "gemini-2.5-flash" (PAID but MORE STRICT safety filters)
 
-  model: "gemini-3-pro-preview"  # USING GEMINI 3 PRO (FREE DURING PREVIEW!)
+  model: "gemini-2.0-flash"  # STABLE: Fast model with 1000 RPM on paid tier
   temperature: 0.7
   max_tokens: 1024
 
@@ -45,8 +46,8 @@ agents:
 # ============================================================================
 marl:
   algorithm: "api_grpo"  # Group Relative Policy Optimization
-  beam_width: 8          # Explore 8 research trajectories in parallel
-  k_samples: 4           # 4 response candidates per agent per turn
+  beam_width: 2          # OPTIMIZED: 2 trajectories for speed while keeping exploration
+  k_samples: 2           # OPTIMIZED: 2 samples per trajectory - maintains diversity
   episodes: 50           # Number of research problems to solve
 
   # Exploration vs Exploitation
@@ -58,7 +59,7 @@ marl:
 
   # Value estimation
   use_centralized_critic: true
-  critic_model: "claude-3-5-sonnet-20241022"
+  critic_model: "gemini-2.0-flash-thinking-exp"
 
 # ============================================================================
 # Reward Configuration - Scientific Research Metrics
@@ -233,11 +234,16 @@ api:
   anthropic_api_key_env: "ANTHROPIC_API_KEY"  # Claude API key
   gemini_api_key_env: "GEMINI_API_KEY"        # Google Gemini API key (AIzaSyDqyCH4QpQ-y_nEWCpw2ZBfiFOPF0ieB6I)
 
-  # Rate limiting
-  max_requests_per_minute: 50
-  max_tokens_per_minute: 100000
-  retry_attempts: 3
-  retry_delay: 1.0
+  # Rate limiting - PAID TIER ACTIVATED! 🚀
+  max_requests_per_minute: 1000  # UPGRADED: Gemini paid tier = 1000 RPM (up to 2000 RPM!)
+  max_tokens_per_minute: 4000000  # 4M TPM on paid tier
+  retry_attempts: 5  # More retries for resilience
+  retry_delay: 0.5  # Faster retry for high RPM
+
+  # NOTE: Using gemini-1.5-flash (PAID model with high limits)
+  # - 1000 RPM (Requests Per Minute) on paid tier with $300 credit
+  # - Cost: ~$0.10-0.20 per episode, ~$5-10 for 50 episodes
+  # - Much faster than free tier!
 
   # External research APIs (optional)
   use_semantic_scholar: false    # For literature search

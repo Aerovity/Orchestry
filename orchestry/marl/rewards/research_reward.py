@@ -49,7 +49,8 @@ class ResearchRewardModel:
                 genai.configure(api_key=gemini_api_key)
             elif api_key:
                 genai.configure(api_key=api_key)
-            self.client = genai.GenerativeModel(model or "gemini-2.0-flash-exp")
+            # Default to gemini-2.0-flash - stable and fast with high RPM
+            self.client = genai.GenerativeModel(model or "gemini-2.0-flash")
         else:
             raise ValueError(f"Unknown provider: {provider}. Use 'claude' or 'gemini'")
 
@@ -80,6 +81,10 @@ class ResearchRewardModel:
         Returns:
             Dictionary with scores for each dimension (0-10)
         """
+        import logging
+        import time
+        logger = logging.getLogger(__name__)
+
         # Build evaluation prompt
         prompt = self._build_evaluation_prompt(
             topic=topic,
@@ -92,30 +97,88 @@ class ResearchRewardModel:
             paper_draft=paper_draft,
         )
 
-        # Get LLM evaluation based on provider
-        if self.provider == "claude":
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1024,
-                temperature=0.0,  # Deterministic scoring
-                messages=[{"role": "user", "content": prompt}],
-            )
-            response_text = response.content[0].text
-        elif self.provider == "gemini":
-            response = self.client.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.0, max_output_tokens=1024
-                ),
-            )
-            response_text = response.text
-        else:
-            raise ValueError(f"Unknown provider: {self.provider}")
+        # Retry logic for LLM judge
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Get LLM evaluation based on provider
+                if self.provider == "claude":
+                    response = self.client.messages.create(
+                        model=self.model,
+                        max_tokens=1024,
+                        temperature=0.0,  # Deterministic scoring
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    response_text = response.content[0].text
+                elif self.provider == "gemini":
+                    # Disable safety filters for research evaluation
+                    from google.generativeai.types import HarmCategory, HarmBlockThreshold
+                    safety_settings = {
+                        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                    }
 
-        # Parse scores from response
-        scores = self._parse_scores(response_text)
+                    response = self.client.generate_content(
+                        prompt,
+                        generation_config=genai.types.GenerationConfig(
+                            temperature=0.0, max_output_tokens=1024
+                        ),
+                        safety_settings=safety_settings,
+                    )
 
-        return scores
+                    # Handle potential safety blocks
+                    try:
+                        response_text = response.text
+                    except (ValueError, AttributeError) as e:
+                        logger.warning(f"Gemini blocked LLM judge response (attempt {attempt + 1}/{max_retries}): {e}")
+                        if attempt < max_retries - 1:
+                            time.sleep(1)
+                            continue
+                        # Use fallback scores on final attempt
+                        return self._get_fallback_scores()
+                else:
+                    raise ValueError(f"Unknown provider: {self.provider}")
+
+                # Parse scores from response
+                scores = self._parse_scores(response_text)
+
+                # Verify we got valid scores (not all defaults)
+                if scores.get("total", 0) > 0:
+                    return scores
+                else:
+                    logger.warning(f"LLM judge returned invalid scores (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    return self._get_fallback_scores()
+
+            except Exception as e:
+                logger.error(f"LLM judge error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                    continue
+                # Return fallback scores on final failure
+                return self._get_fallback_scores()
+
+        # Should never reach here, but just in case
+        return self._get_fallback_scores()
+
+    def _get_fallback_scores(self) -> dict[str, float]:
+        """Return fallback scores when LLM judge fails."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("Using fallback scores for LLM judge failure")
+
+        return {
+            "scientific_rigor": 5.0,
+            "novelty": 5.0,
+            "completeness": 5.0,
+            "collaboration": 5.0,
+            "feasibility": 5.0,
+            "total": 5.0,
+        }
 
     def _build_evaluation_prompt(
         self,
@@ -230,6 +293,9 @@ Provide decimal scores (e.g., 7.5) for precision.
 
     def _parse_scores(self, response_text: str) -> dict[str, float]:
         """Parse scores from Claude or Gemini response."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         scores = {
             "scientific_rigor": 5.0,
             "novelty": 5.0,
@@ -239,18 +305,30 @@ Provide decimal scores (e.g., 7.5) for precision.
         }
 
         # Parse each line
+        parsed_count = 0
         for line in response_text.split("\n"):
             line = line.strip()
-            if "SCIENTIFIC_RIGOR:" in line:
-                scores["scientific_rigor"] = float(line.split(":")[-1].strip())
-            elif "NOVELTY:" in line:
-                scores["novelty"] = float(line.split(":")[-1].strip())
-            elif "COMPLETENESS:" in line:
-                scores["completeness"] = float(line.split(":")[-1].strip())
-            elif "COLLABORATION:" in line:
-                scores["collaboration"] = float(line.split(":")[-1].strip())
-            elif "FEASIBILITY:" in line:
-                scores["feasibility"] = float(line.split(":")[-1].strip())
+            try:
+                if "SCIENTIFIC_RIGOR:" in line:
+                    scores["scientific_rigor"] = float(line.split(":")[-1].strip())
+                    parsed_count += 1
+                elif "NOVELTY:" in line:
+                    scores["novelty"] = float(line.split(":")[-1].strip())
+                    parsed_count += 1
+                elif "COMPLETENESS:" in line:
+                    scores["completeness"] = float(line.split(":")[-1].strip())
+                    parsed_count += 1
+                elif "COLLABORATION:" in line:
+                    scores["collaboration"] = float(line.split(":")[-1].strip())
+                    parsed_count += 1
+                elif "FEASIBILITY:" in line:
+                    scores["feasibility"] = float(line.split(":")[-1].strip())
+                    parsed_count += 1
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Failed to parse score from line: {line} - {e}")
+
+        if parsed_count == 0:
+            logger.warning(f"LLM Judge returned no parseable scores! Response:\n{response_text[:500]}")
 
         # Calculate weighted total
         scores["total"] = (
@@ -260,6 +338,8 @@ Provide decimal scores (e.g., 7.5) for precision.
             + 0.15 * scores["collaboration"]
             + 0.15 * scores["feasibility"]
         )
+
+        logger.info(f"LLM Judge Scores: Rigor={scores['scientific_rigor']:.1f}, Novel={scores['novelty']:.1f}, Complete={scores['completeness']:.1f}, Collab={scores['collaboration']:.1f}, Feasible={scores['feasibility']:.1f} → Total={scores['total']:.2f}")
 
         return scores
 

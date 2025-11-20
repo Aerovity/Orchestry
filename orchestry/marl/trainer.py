@@ -69,7 +69,7 @@ class MARLTrainer:
         self.beam_width: int = self.config.get("beam_width", 10)
         self.k_samples: int = self.config.get("k_samples", 5)
         self.exploration_rate: float = self.config.get("exploration_rate", 0.1)
-        self.learning_frequency: int = self.config.get("learning_frequency", 5)
+        self.learning_frequency: int = self.config.get("meta_learning", {}).get("update_frequency", 10)
 
         # Initialize components with provider support
         self.grpo = APIGroupRelativePolicyOptimizer(
@@ -193,7 +193,11 @@ class MARLTrainer:
         max_turns = self.task.config.max_turns
 
         if verbose:
-            print(f"\nTask: {initial_obs.get('metadata', {}).get('problem_name', 'Unknown')}")
+            # Get task name from metadata or topic
+            task_name = initial_obs.get('metadata', {}).get('problem_name')
+            if not task_name:
+                task_name = initial_obs.get('topic', task_description[:50] if task_description else 'Unknown')
+            print(f"\nTask: {task_name}")
             print("Starting beam search...")
 
         # Beam search loop
@@ -235,8 +239,9 @@ class MARLTrainer:
                         action=sample,
                     )
 
-                    # Update task state
-                    _, done = self.task.step(agent.agent_id, agent.role, sample)
+                    # Check if done based on trajectory length and research progress
+                    # Don't rely on shared task state - each trajectory tracks its own progress
+                    done = self._check_trajectory_complete(new_traj)
                     if done:
                         new_traj.done = True
 
@@ -272,10 +277,67 @@ class MARLTrainer:
         final_scores = []
 
         for traj in final_trajectories:
-            # Use task's evaluate method
-            task_scores = self.task.evaluate()
-            total_score = task_scores["total"]
+            # Convert trajectory to dict format for evaluation
+            trajectory_dict = traj.to_dict()
+            turns = trajectory_dict.get("turns", [])
 
+            # Use LLM judge if configured, otherwise use heuristic evaluation
+            if self.config.get("rewards", {}).get("use_llm_judge") and self.config.get("rewards", {}).get("llm_judge"):
+                llm_judge = self.config["rewards"]["llm_judge"]
+                # Extract research components from trajectory
+                literature_reviewed = []
+                hypotheses = []
+                experiments = []
+                analyses = []
+                paper_draft = ""
+
+                for turn in turns:
+                    if turn.get("agent_role") == "literature_synthesizer":
+                        literature_reviewed.append(turn.get("action", ""))
+                    elif turn.get("agent_role") == "hypothesis_generator":
+                        hypotheses.append(turn.get("action", ""))
+                    elif turn.get("agent_role") == "experimental_designer":
+                        experiments.append({"design": turn.get("action", "")})
+                    elif turn.get("agent_role") == "data_analyst":
+                        analyses.append(turn.get("action", ""))
+                    elif turn.get("agent_role") == "paper_writer":
+                        paper_draft += turn.get("action", "") + "\n\n"
+
+                # Use LLM judge for evaluation
+                task_scores = llm_judge.evaluate_research(
+                    topic=initial_obs.get("topic", "Unknown"),
+                    objective=initial_obs.get("objective", "Research objective"),
+                    trajectory=turns,
+                    literature_reviewed=literature_reviewed,
+                    hypotheses=hypotheses,
+                    experiments=experiments,
+                    analyses=analyses,
+                    paper_draft=paper_draft,
+                )
+            else:
+                # Use task's heuristic evaluate method
+                # First sync task state from trajectory
+                self.task.literature_reviewed = []
+                self.task.hypotheses_generated = []
+                self.task.experiments_designed = []
+                self.task.analyses_completed = []
+                self.task.paper_draft = ""
+
+                for turn in turns:
+                    if turn.get("agent_role") == "literature_synthesizer":
+                        self.task.literature_reviewed.append(turn.get("action", ""))
+                    elif turn.get("agent_role") == "hypothesis_generator":
+                        self.task.hypotheses_generated.append(turn.get("action", ""))
+                    elif turn.get("agent_role") == "experimental_designer":
+                        self.task.experiments_designed.append({"design": turn.get("action", "")})
+                    elif turn.get("agent_role") == "data_analyst":
+                        self.task.analyses_completed.append(turn.get("action", ""))
+                    elif turn.get("agent_role") == "paper_writer":
+                        self.task.paper_draft += turn.get("action", "") + "\n\n"
+
+                task_scores = self.task.evaluate(turns)
+
+            total_score = task_scores["total"]
             traj.set_rewards(total_score, task_scores)
             final_scores.append(total_score)
 
@@ -294,15 +356,62 @@ class MARLTrainer:
         if verbose:
             print(f"\nSelected trajectory {best_idx}")
             print(f"Reward: {best_reward:.2f}")
-            print(
-                f"Components: Q={best_trajectory.reward_components.get('quality', 0):.1f}, "
-                f"C={best_trajectory.reward_components.get('collaboration', 0):.1f}, "
-                f"E={best_trajectory.reward_components.get('efficiency', 0):.1f}",
-            )
+            # Show actual research reward components
+            comps = best_trajectory.reward_components
+            if 'scientific_rigor' in comps:
+                # Research lab rewards
+                print(
+                    f"Components: Rigor={comps.get('scientific_rigor', 0):.1f}, "
+                    f"Novel={comps.get('novelty', 0):.1f}, "
+                    f"Complete={comps.get('completeness', 0):.1f}, "
+                    f"Collab={comps.get('collaboration', 0):.1f}, "
+                    f"Feasible={comps.get('feasibility', 0):.1f}",
+                )
+            else:
+                # Legacy code review rewards
+                print(
+                    f"Components: Q={comps.get('quality', 0):.1f}, "
+                    f"C={comps.get('collaboration', 0):.1f}, "
+                    f"E={comps.get('efficiency', 0):.1f}",
+                )
             print(f"\nConversation ({len(best_trajectory)} turns):")
             print(best_trajectory.get_full_conversation())
 
         return best_trajectory, best_reward
+
+    def _check_trajectory_complete(self, traj: MultiTurnTrajectory) -> bool:
+        """Check if a trajectory is complete based on research phases.
+
+        Args:
+            traj: Trajectory to check
+
+        Returns:
+            True if trajectory has completed all research phases
+        """
+        # Must have minimum turns (all 5 agents contributed)
+        if len(traj) < 5:
+            return False
+
+        # Check if all phases attempted by analyzing agent roles
+        agent_roles_present = set()
+        paper_length = 0
+
+        for turn in traj.turns:
+            agent_roles_present.add(turn.agent_role)
+            # Track paper writer output
+            if turn.agent_role == "paper_writer":
+                paper_length += len(turn.action)
+
+        # All 5 roles must have contributed
+        required_roles = {"literature_synthesizer", "hypothesis_generator",
+                         "experimental_designer", "data_analyst", "paper_writer"}
+        all_phases_attempted = required_roles.issubset(agent_roles_present)
+
+        # Paper writer should have produced substantial content
+        substantial_paper = paper_length >= 3000
+
+        # Complete if all phases done with substantial paper
+        return all_phases_attempted and substantial_paper
 
     def _update_agent_behaviors(self, verbose: bool = False) -> None:
         """Extract successful behaviors and update agents.
@@ -355,7 +464,6 @@ class MARLTrainer:
             "avg_reward": np.mean([ep.total_reward for ep in self.episodes]),
             "best_reward": max([ep.total_reward for ep in self.episodes]),
             "agent_behaviors": {agent.role: len(agent.learned_behaviors) for agent in self.agents},
-            "cache_stats": self.grpo.get_cache_stats(),
         }
 
         with open(checkpoint_path, "w") as f:
@@ -375,15 +483,35 @@ class MARLTrainer:
         # Save rewards CSV
         rewards_path = self.save_dir / "rewards.csv"
         with open(rewards_path, "w") as f:
-            f.write("episode,total,quality,collaboration,efficiency,turns\n")
-            f.writelines(
-                f"{i},{ep.total_reward:.2f},"
-                f"{ep.reward_components.get('quality', 0):.2f},"
-                f"{ep.reward_components.get('collaboration', 0):.2f},"
-                f"{ep.reward_components.get('efficiency', 0):.2f},"
-                f"{len(ep)}\n"
-                for i, ep in enumerate(self.episodes, 1)
-            )
+            # Check if research or code review task
+            if self.episodes and 'scientific_rigor' in self.episodes[0].reward_components:
+                # Research lab CSV
+                f.write("episode,total,scientific_rigor,novelty,completeness,collaboration,feasibility,turns\n")
+                f.writelines(
+                    f"{i},{ep.total_reward:.2f},"
+                    f"{ep.reward_components.get('scientific_rigor', 0):.2f},"
+                    f"{ep.reward_components.get('novelty', 0):.2f},"
+                    f"{ep.reward_components.get('completeness', 0):.2f},"
+                    f"{ep.reward_components.get('collaboration', 0):.2f},"
+                    f"{ep.reward_components.get('feasibility', 0):.2f},"
+                    f"{len(ep)}\n"
+                    for i, ep in enumerate(self.episodes, 1)
+                )
+            else:
+                # Legacy code review CSV
+                f.write("episode,total,quality,collaboration,efficiency,turns\n")
+                f.writelines(
+                    f"{i},{ep.total_reward:.2f},"
+                    f"{ep.reward_components.get('quality', 0):.2f},"
+                    f"{ep.reward_components.get('collaboration', 0):.2f},"
+                    f"{ep.reward_components.get('efficiency', 0):.2f},"
+                    f"{len(ep)}\n"
+                    for i, ep in enumerate(self.episodes, 1)
+                )
+
+        # Save research papers as markdown files
+        if self.config.get("output", {}).get("save_papers", True):
+            self._save_research_papers()
 
         # Save behavior library
         behaviors_path = self.save_dir / "learned_behaviors.json"
@@ -395,6 +523,111 @@ class MARLTrainer:
             json.dump(self._get_training_summary(), f, indent=2)
 
         logger.info(f"Results saved to: {self.save_dir}")
+
+    def _save_research_papers(self) -> None:
+        """Save generated research papers as markdown files."""
+        papers_dir = self.save_dir / "papers"
+        papers_dir.mkdir(exist_ok=True)
+
+        logger.info(f"Saving {len(self.episodes)} research papers to {papers_dir}")
+
+        for i, episode in enumerate(self.episodes, 1):
+            # Extract paper content from trajectory
+            paper_content = self._extract_paper_from_episode(episode)
+
+            if paper_content:
+                # Save as markdown
+                paper_path = papers_dir / f"episode_{i:03d}_paper.md"
+                with open(paper_path, "w", encoding="utf-8") as f:
+                    f.write(paper_content)
+                logger.debug(f"Saved paper for episode {i}: {paper_path}")
+
+        logger.info(f"Saved {len(self.episodes)} papers to {papers_dir}")
+
+    def _extract_paper_from_episode(self, episode: MultiTurnTrajectory) -> str:
+        """Extract research paper content from episode trajectory.
+
+        Args:
+            episode: Episode trajectory
+
+        Returns:
+            Formatted research paper as markdown string
+        """
+        # Extract all agent contributions
+        literature = []
+        hypotheses = []
+        experiments = []
+        analyses = []
+        paper_drafts = []
+
+        for turn in episode.turns:
+            role = turn.agent_role
+            action = turn.action
+
+            if role == "literature_synthesizer":
+                literature.append(action)
+            elif role == "hypothesis_generator":
+                hypotheses.append(action)
+            elif role == "experimental_designer":
+                experiments.append(action)
+            elif role == "data_analyst":
+                analyses.append(action)
+            elif role == "paper_writer":
+                paper_drafts.append(action)
+
+        # Get topic from first turn's observation
+        topic = "Research Study"
+        objective = "Research objective"
+        if episode.turns:
+            obs = episode.turns[0].observation
+            if isinstance(obs, dict):
+                topic = obs.get("topic", topic)
+                objective = obs.get("objective", objective)
+
+        # Format as research paper
+        paper = f"""# {topic}
+
+## Objective
+{objective}
+
+## Reward Score: {episode.total_reward:.2f}
+- Scientific Rigor: {episode.reward_components.get('scientific_rigor', 0):.1f}/10
+- Novelty: {episode.reward_components.get('novelty', 0):.1f}/10
+- Completeness: {episode.reward_components.get('completeness', 0):.1f}/10
+- Collaboration: {episode.reward_components.get('collaboration', 0):.1f}/10
+- Feasibility: {episode.reward_components.get('feasibility', 0):.1f}/10
+
+---
+
+## Literature Review
+
+"""
+        for lit in literature:
+            paper += f"{lit}\n\n"
+
+        paper += "## Hypotheses\n\n"
+        for i, hyp in enumerate(hypotheses, 1):
+            paper += f"### Hypothesis {i}\n{hyp}\n\n"
+
+        paper += "## Experimental Design\n\n"
+        for i, exp in enumerate(experiments, 1):
+            paper += f"### Experiment {i}\n{exp}\n\n"
+
+        paper += "## Data Analysis\n\n"
+        for analysis in analyses:
+            paper += f"{analysis}\n\n"
+
+        paper += "## Paper Draft\n\n"
+        for draft in paper_drafts:
+            paper += f"{draft}\n\n"
+
+        paper += f"""---
+
+*Generated by Orchestry Multi-Agent Research Lab*
+*Episode completed in {len(episode)} turns*
+"""
+
+        return paper
 
     def _get_training_summary(self) -> dict[str, Any]:
         """Get training summary statistics."""

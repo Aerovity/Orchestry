@@ -147,12 +147,14 @@ class APIGroupRelativePolicyOptimizer:
                 genai.configure(api_key=gemini_api_key)
             elif api_key:
                 genai.configure(api_key=api_key)
-            # Default to gemini-2.0-flash - stable and fast with high RPM
             if not self.model:
-                self.model = "gemini-2.0-flash"
+                self.model = "gemini-2.0-flash-exp"
             self.client = genai.GenerativeModel(self.model)
         else:
             raise ValueError(f"Unknown provider: {provider}. Use 'claude' or 'gemini'")
+
+        # Response cache
+        self.cache = ResponseCache(max_size=config.get("cache_size", 1000))
 
         logger.info(
             f"Initialized GRPO with {self.num_agents} agents using {self.provider}, "
@@ -164,6 +166,7 @@ class APIGroupRelativePolicyOptimizer:
         agent: Agent,
         context: str,
         k: int | None = None,
+        use_cache: bool = True,
     ) -> list[str]:
         """Generate k response candidates for an agent.
 
@@ -173,6 +176,7 @@ class APIGroupRelativePolicyOptimizer:
             agent: Agent to generate responses
             context: Conversation context
             k: Number of samples (defaults to self.k_samples)
+            use_cache: Whether to use response cache
 
         Returns:
             List of k possible responses
@@ -180,16 +184,24 @@ class APIGroupRelativePolicyOptimizer:
         """
         k = k or self.k_samples
 
+        # Check cache
+        if use_cache:
+            cached = self.cache.get(agent.agent_id, context, self.temperature, k)
+            if cached is not None:
+                return cached
+
         # Build system prompt with learned behaviors
         system_prompt = self._build_agent_system_prompt(agent)
 
-        # Generate k samples IN PARALLEL using threading
-        import concurrent.futures
-
-        def generate_single_sample(sample_idx: int) -> str:
-            """Generate a single sample (runs in thread)."""
+        # Generate k samples
+        samples = []
+        for i in range(k):
             try:
-                logger.debug(f"Generating sample {sample_idx + 1}/{k} for agent {agent.role}")
+                # Rate limiting
+                if i > 0:
+                    time.sleep(self.rate_limit_delay)
+
+                logger.debug(f"Generating sample {i + 1}/{k} for agent {agent.role}")
 
                 # Generate based on provider
                 if self.provider == "claude":
@@ -203,84 +215,35 @@ class APIGroupRelativePolicyOptimizer:
 
                     content_block = response.content[0]
                     if isinstance(content_block, TextBlock):
-                        return content_block.text
+                        sample_text = content_block.text
                     else:
-                        return str(content_block)
+                        sample_text = str(content_block)
                 elif self.provider == "gemini":
-                    # Add research context prefix for safety filters
-                    research_prefix = "You are a research assistant working on an academic scientific study. This is for educational and agricultural research purposes only. "
-                    full_prompt = f"{research_prefix}{system_prompt}\n\n{context}"
-
-                    # Set safety settings to minimal blocking
-                    from google.generativeai.types import HarmCategory, HarmBlockThreshold
-                    safety_settings = {
-                        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                    }
-
+                    # Combine system prompt and context for Gemini
+                    full_prompt = f"{system_prompt}\n\n{context}"
                     response = self.client.generate_content(
                         full_prompt,
                         generation_config=genai.types.GenerationConfig(
                             temperature=self.temperature,
                             max_output_tokens=self.max_tokens,
                         ),
-                        safety_settings=safety_settings,
                     )
-
-                    # Handle potential safety blocks
-                    try:
-                        return response.text
-                    except (ValueError, AttributeError):
-                        # Use role-specific fallback
-                        import random
-                        fallbacks = {
-                            "literature_synthesizer": [
-                                "Recent studies have explored various mechanisms in this domain with promising results.",
-                                "The literature indicates multiple pathways with important mechanistic insights.",
-                            ],
-                            "hypothesis_generator": [
-                                "Hypothesis: Optimizing key parameters could enhance outcomes through systematic intervention.",
-                                "We hypothesize that modifying specific mechanisms will yield measurable improvements.",
-                            ],
-                            "experimental_designer": [
-                                "Experimental Design: A controlled study measuring primary parameters with appropriate controls.",
-                                "We propose a multi-stage approach with baseline measurements and systematic data collection.",
-                            ],
-                            "data_analyst": [
-                                "Analysis: Results indicate significant patterns with positive trends across conditions.",
-                                "The findings suggest important correlations between key variables.",
-                            ],
-                            "paper_writer": [
-                                "Summary: This research examines important aspects with significant contributions.",
-                                "Abstract: We investigated novel approaches with promising results and implications.",
-                            ]
-                        }
-                        fallback_list = fallbacks.get(agent.role, ["Further investigation is warranted."])
-                        return random.choice(fallback_list)
+                    sample_text = response.text
                 else:
                     raise ValueError(f"Unknown provider: {self.provider}")
 
+                samples.append(sample_text)
+
             except Exception as e:
-                logger.exception(f"Error generating sample {sample_idx + 1} for {agent.role}: {e}")
-                return f"[Error generating response: {e!s}]"
+                logger.exception(f"Error generating sample {i + 1} for {agent.role}: {e}")
+                # Use fallback response
+                samples.append(f"[Error generating response: {e!s}]")
 
-        # Execute all k samples in parallel using ThreadPoolExecutor
-        with concurrent.futures.ThreadPoolExecutor(max_workers=k) as executor:
-            # Submit all tasks
-            futures = [executor.submit(generate_single_sample, i) for i in range(k)]
+        # Cache the results
+        if use_cache:
+            self.cache.put(agent.agent_id, context, self.temperature, k, samples)
 
-            # Collect results as they complete
-            samples = []
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    samples.append(future.result())
-                except Exception as e:
-                    logger.exception(f"Error in parallel sample generation: {e}")
-                    samples.append(f"[Error: {e!s}]")
-
-        logger.debug(f"Generated {len(samples)} samples for agent {agent.role} in parallel")
+        logger.debug(f"Generated {len(samples)} samples for agent {agent.role}")
 
         return samples
 
@@ -392,14 +355,10 @@ class APIGroupRelativePolicyOptimizer:
         )
 
     def get_cache_stats(self) -> dict[str, int | float]:
-        """Get cache statistics (placeholder for compatibility).
+        """Get response cache statistics."""
+        return self.cache.get_stats()
 
-        Returns:
-            Empty dict (caching not implemented in current version)
-        """
-        return {
-            "size": 0,
-            "hits": 0,
-            "misses": 0,
-            "hit_rate": 0.0,
-        }
+    def clear_cache(self) -> None:
+        """Clear response cache."""
+        self.cache = ResponseCache()
+        logger.info("Response cache cleared")

@@ -23,12 +23,17 @@ Usage:
 import argparse
 import json
 import os
+import signal
 import sys
 from datetime import datetime
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 from rich.console import Console
+
+# Load environment variables from .env file
+load_dotenv()
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
@@ -40,6 +45,28 @@ from orchestry.tasks.research_lab import ResearchLabTask
 
 
 console = Console()
+
+# Global trainer reference for signal handler
+_global_trainer = None
+
+
+def signal_handler(sig, frame):
+    """Handle Ctrl+C gracefully - save papers before exit."""
+    global _global_trainer
+    console.print("\n\n[yellow]⚠ Interrupted by user (Ctrl+C)[/yellow]")
+
+    if _global_trainer and hasattr(_global_trainer, 'episodes') and _global_trainer.episodes:
+        console.print("[cyan]Saving research papers before exit...[/cyan]")
+        try:
+            _global_trainer._save_final_results()
+            console.print(f"[green]✓ Saved {len(_global_trainer.episodes)} papers to {_global_trainer.save_dir}/papers/[/green]")
+        except Exception as e:
+            console.print(f"[red]✗ Error saving papers: {e}[/red]")
+    else:
+        console.print("[yellow]No episodes to save[/yellow]")
+
+    console.print("[dim]Exiting...[/dim]")
+    sys.exit(0)
 
 
 def print_header() -> None:
@@ -181,7 +208,7 @@ def load_config(config_path: str = "configs/research_lab.yaml") -> dict:
         console.print("[yellow]Using default configuration[/yellow]")
         return get_default_config()
 
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
     return config
@@ -270,8 +297,15 @@ def create_research_task(research_problem: dict, config: dict) -> ResearchLabTas
 def create_llm_judge(api_key: str, provider: str = "claude", gemini_api_key: str | None = None) -> ResearchRewardModel:
     """Create LLM-as-judge reward model."""
     try:
+        # Set model based on provider
+        if provider == "gemini":
+            model = "gemini-2.0-flash"  # STABLE model with high RPM - fast and reliable
+        else:
+            model = "claude-3-5-sonnet-20241022"
+
         reward_model = ResearchRewardModel(
             api_key=api_key,
+            model=model,
             provider=provider,
             gemini_api_key=gemini_api_key
         )
@@ -289,8 +323,13 @@ def train_research_lab(
     task: ResearchLabTask,
     args: argparse.Namespace,
     llm_judge: ResearchRewardModel | None = None,
+    api_key: str = None,
+    provider: str = "claude",
+    gemini_api_key: str | None = None,
 ) -> dict:
     """Train the research lab agents."""
+    global _global_trainer
+
     # Override config with CLI args
     if args.episodes:
         config["marl"]["episodes"] = args.episodes
@@ -311,12 +350,41 @@ def train_research_lab(
         config["rewards"]["llm_judge"] = llm_judge
         config["rewards"]["use_llm_judge"] = True
 
+    # Create agents from roles with proper system prompts from task
+    from orchestry.marl.api_grpo import Agent
+    agents = []
+
+    # Get a sample observation to build base prompts
+    sample_obs = task.reset()
+
+    for i, role in enumerate(config["agents"]["roles"]):
+        # Get the full agent prompt from the task (includes role-specific instructions)
+        full_prompt = task.get_agent_prompt(agent_id=i, agent_role=role, observation=sample_obs)
+
+        agent = Agent(
+            agent_id=i,
+            role=role,
+            goal=f"Expert {role.replace('_', ' ')} for research collaboration",
+            system_prompt=full_prompt,
+            learned_behaviors=[]
+        )
+        agents.append(agent)
+
     # Create trainer
     trainer = MARLTrainer(
         task=task,
+        agents=agents,
+        api_key=api_key,
         config=config,
-        agent_roles=config["agents"]["roles"],
+        provider=provider,
+        gemini_api_key=gemini_api_key
     )
+
+    # Set global trainer for signal handler
+    _global_trainer = trainer
+
+    # Register signal handler for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
 
     console.print(f"[green]✓[/green] Initialized MARL trainer")
     console.print()
@@ -337,16 +405,16 @@ def train_research_lab(
             total=config["marl"]["episodes"],
         )
 
-        # Episode callback
-        def episode_callback(episode_num: int, episode_results: dict) -> None:
-            progress.update(task_progress, advance=1)
+        # Train without callback (the trainer has its own progress tracking)
+        # Just run training with appropriate parameters
+        results = trainer.train(
+            num_episodes=config["marl"]["episodes"],
+            verbose=args.verbose if hasattr(args, 'verbose') else False,
+            save_frequency=5
+        )
 
-            # Print episode summary
-            if episode_num % 5 == 0 or args.verbose:
-                print_episode_summary(episode_num, episode_results)
-
-        # Train with callback
-        results = trainer.train(episode_callback=episode_callback)
+        # Update progress bar to complete
+        progress.update(task_progress, completed=config["marl"]["episodes"])
 
     return results
 
@@ -479,21 +547,105 @@ def show_best_episode(episode: dict) -> None:
 
 def save_research_papers(results: dict, output_dir: Path) -> None:
     """Save generated research papers to files."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     papers_dir = output_dir / "generated_papers"
     papers_dir.mkdir(parents=True, exist_ok=True)
 
-    for i, episode in enumerate(results.get("episodes", []), 1):
-        paper_draft = episode.get("paper_draft", "")
-        if paper_draft:
-            paper_file = papers_dir / f"paper_episode_{i:03d}.md"
-            with open(paper_file, "w") as f:
-                f.write(f"# Research Paper - Episode {i}\n\n")
-                f.write(f"**Topic:** {episode.get('topic', 'Unknown')}\n\n")
-                f.write(f"**Score:** {episode.get('score', 0):.2f}/10\n\n")
-                f.write("---\n\n")
-                f.write(paper_draft)
+    episodes_data = results.get("episodes", [])
+    if not episodes_data:
+        console.print("[yellow]⚠ No episodes found to save papers[/yellow]")
+        return
 
-    console.print(f"[green]✓[/green] Saved {len(results.get('episodes', []))} research papers")
+    papers_saved = 0
+    for i, episode in enumerate(episodes_data, 1):
+        # Extract all research content from trajectory turns
+        paper_draft = ""
+        literature = ""
+        hypotheses = ""
+        experiments = ""
+        analysis = ""
+
+        turns = episode.get("turns", [])
+        logger.info(f"Episode {i}: Processing {len(turns)} turns")
+
+        for turn in turns:
+            agent_role = turn.get("agent_role", "")
+            action = turn.get("action", "")
+
+            if agent_role == "literature_synthesizer":
+                literature += action + "\n\n"
+            elif agent_role == "hypothesis_generator":
+                hypotheses += action + "\n\n"
+            elif agent_role == "experimental_designer":
+                experiments += action + "\n\n"
+            elif agent_role == "data_analyst":
+                analysis += action + "\n\n"
+            elif agent_role == "paper_writer":
+                paper_draft += action + "\n\n"
+
+        # Check if we have any content to save
+        has_content = any([
+            paper_draft.strip(),
+            literature.strip(),
+            hypotheses.strip(),
+            experiments.strip(),
+            analysis.strip()
+        ])
+
+        if has_content:
+            paper_file = papers_dir / f"paper_episode_{i:03d}.md"
+            logger.info(f"Saving paper to {paper_file}")
+
+            with open(paper_file, "w", encoding='utf-8') as f:
+                f.write(f"# Research Paper - Episode {i}\n\n")
+                f.write(f"**Score:** {episode.get('total_reward', 0):.2f}/10\n\n")
+
+                # Write reward components
+                comps = episode.get("reward_components", {})
+                if comps:
+                    f.write("**Reward Components:**\n")
+                    for key, val in comps.items():
+                        if key != 'total':
+                            f.write(f"- {key.replace('_', ' ').title()}: {val:.2f}/10\n")
+                    f.write("\n")
+
+                f.write("---\n\n")
+
+                # Write full research process
+                if literature.strip():
+                    f.write("## Literature Review\n\n")
+                    f.write(literature)
+                    f.write("\n---\n\n")
+
+                if hypotheses.strip():
+                    f.write("## Hypotheses\n\n")
+                    f.write(hypotheses)
+                    f.write("\n---\n\n")
+
+                if experiments.strip():
+                    f.write("## Experimental Design\n\n")
+                    f.write(experiments)
+                    f.write("\n---\n\n")
+
+                if analysis.strip():
+                    f.write("## Data Analysis\n\n")
+                    f.write(analysis)
+                    f.write("\n---\n\n")
+
+                if paper_draft.strip():
+                    f.write("## Paper Draft\n\n")
+                    f.write(paper_draft)
+
+            papers_saved += 1
+            logger.info(f"Successfully saved paper {i}")
+        else:
+            logger.warning(f"Episode {i}: No content to save (turns: {len(turns)})")
+
+    console.print(f"[green]✓[/green] Saved {papers_saved} research papers to {papers_dir}")
+    if papers_saved == 0:
+        console.print("[yellow]⚠ Warning: No papers had content to save. Check agent outputs.[/yellow]")
 
 
 def main() -> None:
@@ -644,7 +796,7 @@ Examples:
     task = create_research_task(research_problem, config)
 
     # Train
-    results = train_research_lab(config, task, args, llm_judge)
+    results = train_research_lab(config, task, args, llm_judge, api_key, provider, gemini_api_key)
 
     # Print results
     print_final_results(results, args)
